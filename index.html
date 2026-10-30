@@ -378,14 +378,30 @@ function describe(e,m){
 }
 const sortedEvents=m=>m.events.map((e,i)=>({e,i})).sort((a,b)=>a.e.period-b.e.period||a.e.minute-b.e.minute||a.i-b.i).map(x=>x.e);
 
+function matchEnd(m){
+  const len=(m.clock&&m.clock.len)||(m.periods*m.periodMins)||90;
+  let last=0;for(const e of m.events)if(e.t!=='note'&&e.t!=='period'&&e.minute>last)last=e.minute;
+  return Math.max(len,last);
+}
+function minsPlayed(m,pid){
+  const r=m.squad[pid];if(!r||(r.role!=='starter'&&r.role!=='sub'))return 0;
+  const ev=sortedEvents(m);let on=r.role==='starter'?0:null,off=null;
+  for(const e of ev){
+    if(e.t==='sub'&&e.onId===pid&&on===null)on=e.minute;
+    if(on!==null&&off===null&&((e.t==='sub'&&e.offId===pid)||(e.t==='red'&&e.playerId===pid)))off=e.minute;
+  }
+  if(on===null)return 0;
+  return Math.max(0,(off===null?matchEnd(m):off)-on);
+}
 function stats(pid){
-  const o={sel:0,played:0,started:0,goals:0,assists:0,shots:0,key:0,saves:0,tackles:0,yc:0,rc:0};
+  const o={sel:0,played:0,started:0,mins:0,goals:0,assists:0,shots:0,key:0,saves:0,tackles:0,yc:0,rc:0};
   for(const m of S.matches){
     if(m.status!=='done')continue;
     const r=m.squad[pid];if(!r||(r.role!=='starter'&&r.role!=='sub'))continue;
     o.sel++;
     if(r.role==='starter')o.started++;
     if(r.role==='starter'||m.events.some(e=>e.t==='sub'&&e.onId===pid))o.played++;
+    o.mins+=minsPlayed(m,pid);
     for(const e of m.events){
       if(e.t==='goal'&&e.playerId===pid&&e.how!=='Own goal')o.goals++;
       if(e.t==='goal'&&e.assistId===pid)o.assists++;
@@ -474,7 +490,7 @@ function teamView(){
   </main>`;
 }
 
-function statLine(pid){const s=stats(pid);if(!s.played)return'';return `${s.played} app${s.played>1?'s':''} · ${s.goals} goal${s.goals===1?'':'s'} · ${s.assists} assist${s.assists===1?'':'s'}`+(s.yc?` · ${s.yc}🟨`:'')+(s.rc?` · ${s.rc}🟥`:'')}
+function statLine(pid){const s=stats(pid);if(!s.played)return'';return `${s.played} app${s.played>1?'s':''} · ${s.mins}' · ${s.goals} goal${s.goals===1?'':'s'} · ${s.assists} assist${s.assists===1?'':'s'}`+(s.yc?` · ${s.yc}🟨`:'')+(s.rc?` · ${s.rc}🟥`:'')}
 
 function squadView(){
   const ps=activePlayers();
@@ -614,8 +630,8 @@ function summaryView(m){
   ${sec('Key moments',key.map(e=>row(e,describe(e,m))))}
   ${sec('Notes',notes.map(e=>row(e,esc(e.text))))}
   <h2>Team</h2><div class="card">
-   <div class="lbl">Started</div><div>${squadBy('starter').map(id=>esc(label(id))).join('<br>')||'—'}</div>
-   <div class="lbl" style="margin-top:10px">Subs</div><div>${squadBy('sub').map(id=>esc(label(id))).join('<br>')||'—'}</div>
+   <div class="lbl">Started</div><div>${squadBy('starter').map(id=>esc(label(id))+` <span class="stat">${minsPlayed(m,id)}'</span>`).join('<br>')||'—'}</div>
+   <div class="lbl" style="margin-top:10px">Subs</div><div>${squadBy('sub').map(id=>esc(label(id))+(minsPlayed(m,id)?` <span class="stat">${minsPlayed(m,id)}'</span>`:'')).join('<br>')||'—'}</div>
    ${squadBy('out').length?`<div class="lbl" style="margin-top:10px">Not available</div><div>${squadBy('out').map(id=>esc(label(id))+` <span class="stat">${esc((m.squad[id].reason||'Unknown').toLowerCase())}</span>`).join('<br>')}</div>`:''}
   </div>
   <fieldset ${canEdit()?'':'disabled'}><label>Match report / coach notes<textarea data-bind="m.notes" placeholder="How did it go? What to work on?">${esc(m.notes||'')}</textarea></label></fieldset>
@@ -1318,20 +1334,20 @@ function teamView(){
 }
 
 /* ---------- stats (read only) ---------- */
-const STAT_COLS=[['Sel','sel','In the matchday squad'],['MP','played','Matches played'],['St','started','Started'],['⚽','goals','Goals'],['🅰','assists','Assists'],['🎯','shots','Shots'],['🔑','key','Key passes'],['🧤','saves','Key saves'],['🛡','tackles','Key defending'],['🟨','yc','Yellow cards'],['🟥','rc','Red cards']];
+const STAT_COLS=[['Sel','sel','In the matchday squad'],['MP','played','Matches played'],['St','started','Started'],['Min','mins','Minutes played'],['⚽','goals','Goals'],['🅰','assists','Assists'],['🎯','shots','Shots'],['🔑','key','Key passes'],['🧤','saves','Key saves'],['🛡','tackles','Key defending'],['🟨','yc','Yellow cards'],['🟥','rc','Red cards']];
 function statsView(){
   const ps=activePlayers();
   const rows=ps.map(p=>({p,s:stats(p.id),a:attStats(p.id)}));
-  const key={num:r=>r.p.num,goals:r=>-r.s.goals,assists:r=>-r.s.assists,played:r=>-r.s.played,att:r=>-(r.a.pct==null?-1:r.a.pct)}[V.sort]||(r=>r.p.num);
+  const key={num:r=>r.p.num,goals:r=>-r.s.goals,assists:r=>-r.s.assists,played:r=>-r.s.played,mins:r=>-r.s.mins,att:r=>-(r.a.pct==null?-1:r.a.pct)}[V.sort]||(r=>r.p.num);
   rows.sort((x,y)=>key(x)-key(y)||x.p.num-y.p.num);
   const tot={};STAT_COLS.forEach(c=>{tot[c[1]]=rows.reduce((n,r)=>n+r.s[c[1]],0)});
   const done=S.matches.filter(m=>m.status==='done').length;
   return header('Squad stats',done+' match'+(done===1?'':'es')+' played · view only')+`<main>
-  <div class="chips small">${[['num','No.'],['goals','Goals'],['assists','Assists'],['played','Played'],['att','Attendance']].map(([k,l])=>`<button class="${V.sort===k?'on':''}" data-act="sortStats" data-v="${k}">${l}</button>`).join('')}</div>
+  <div class="chips small">${[['num','No.'],['goals','Goals'],['assists','Assists'],['played','Played'],['mins','Minutes'],['att','Attendance']].map(([k,l])=>`<button class="${V.sort===k?'on':''}" data-act="sortStats" data-v="${k}">${l}</button>`).join('')}</div>
   ${rows.length?`<div class="tbl"><table><thead><tr><th class="n">#</th><th class="nm">Name</th>${STAT_COLS.map(c=>`<th title="${c[2]}">${c[0]}</th>`).join('')}<th title="Training attendance">Att</th></tr></thead>
   <tbody>${rows.map(r=>`<tr data-act="pstat" data-id="${r.p.id}"><td class="n">${esc(r.p.num)}</td><td class="nm">${esc(r.p.name)}</td>${STAT_COLS.map(c=>`<td>${r.s[c[1]]}</td>`).join('')}<td>${r.a.pct==null?'–':r.a.pct+'%'}</td></tr>`).join('')}</tbody>
   <tfoot><tr><td class="n"></td><td class="nm">Team</td>${STAT_COLS.map(c=>`<td>${tot[c[1]]}</td>`).join('')}<td></td></tr></tfoot></table></div>
-  <div class="note">Sel = in the matchday squad · MP = played · St = started · 🅰 assists · 🎯 shots · 🔑 key passes · 🧤 saves · 🛡 key defending · Att = training attendance. Only finished matches count. Tap a player for the full picture.</div>`
+  <div class="note">Sel = in the matchday squad · MP = played · St = started · Min = minutes played (to the final whistle, stoppage included) · 🅰 assists · 🎯 shots · 🔑 key passes · 🧤 saves · 🛡 key defending · Att = training attendance. Only finished matches count. Tap a player for the full picture.</div>`
   :`<div class="empty"><b>No players yet</b>Add your squad first.</div>`}
   </main>`;
 }
@@ -1339,7 +1355,7 @@ function pstatBody(pid){
   const p=P(pid);const s=stats(pid),a=attStats(pid);
   const kv=(l,v)=>`<div class="kv"><span>${l}</span><b>${v}</b></div>`;
   return sheetWrap(esc('#'+p.num+' '+p.name),`<div class="note" style="margin-top:0">${esc(p.pos||'No position set')} · view only</div>
-  <h2 style="margin-top:6px">Matches</h2><div class="card" style="padding:4px 14px">${kv('In the squad',s.sel)}${kv('Played',s.played)}${kv('Started',s.started)}${kv('Came on as a sub',Math.max(0,s.played-s.started))}</div>
+  <h2 style="margin-top:6px">Matches</h2><div class="card" style="padding:4px 14px">${kv('In the squad',s.sel)}${kv('Played',s.played)}${kv('Started',s.started)}${kv('Minutes played',s.mins)}${kv('Came on as a sub',Math.max(0,s.played-s.started))}</div>
   <h2>Contribution</h2><div class="card" style="padding:4px 14px">${kv('⚽ Goals',s.goals)}${kv('🅰 Assists',s.assists)}${kv('🎯 Shots',s.shots)}${kv('🔑 Key passes',s.key)}${kv('🧤 Key saves',s.saves)}${kv('🛡 Key defending',s.tackles)}${kv('🟨 Yellow cards',s.yc)}${kv('🟥 Red cards',s.rc)}</div>
   <h2>Training and events</h2><div class="card" style="padding:4px 14px">${kv('Sessions recorded',a.marked)}${kv('Attended',a.attended+(a.pct==null?'':' ('+a.pct+'%)'))}${kv('Late',a.late)}${kv('Left early',a.early)}${kv('Absent, notified',a.notified)}${kv('Absent, no-show',a.noshow)}</div>`);
 }
@@ -1687,7 +1703,7 @@ document.addEventListener('visibilitychange',()=>{if(!document.hidden){const m=M
 render();
 if(CLOUD&&DB.user)setTimeout(()=>syncNow(),300);
 if('serviceWorker' in navigator&&/^https?:$/.test(location.protocol)){navigator.serviceWorker.register('sw.js').catch(()=>{})}
-window.__touchline={matchSummary,applyRows,S:()=>S,DB:()=>DB,V,act,render,parseRoster,syncNow,rowsFor,pendingCount};
+window.__touchline={minsPlayed,matchEnd,stats,matchSummary,applyRows,S:()=>S,DB:()=>DB,V,act,render,parseRoster,syncNow,rowsFor,pendingCount};
 })();
 </script>
 </body>
