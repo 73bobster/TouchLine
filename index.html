@@ -493,7 +493,7 @@ function renderSheet(){
 function importBody(){
   const I=V.imp;
   if(!I.rows){
-    return `${OCR?`<div class="ocrbox"><label for="ocrfile">📷 Photograph a team sheet</label><input id="ocrfile" type="file" accept="image/*" capture="environment" data-act-change="ocr"><div class="note" style="margin:8px 0 0">${esc(I.busy||'Works best on a printed or neatly written list, one player per line, number first.')}</div></div>`:''}
+    return `${true?`<div class="ocrbox"><label for="impfile">📁 Choose a file (CSV, text or photo)</label><input id="impfile" type="file" accept=".csv,.tsv,.txt,text/*,image/*" data-act-change="impfile"><div class="note" style="margin:8px 0 12px">Spreadsheets: save as CSV first. Columns: number, name.</div>${OCR?`<label for="ocrfile">📷 Photograph a team sheet</label><input id="ocrfile" type="file" accept="image/*" capture="environment" data-act-change="ocr">`:''}<div class="note" style="margin:8px 0 0">${esc(I.busy||'Works best on a printed or neatly written list, one player per line, number first.')}</div></div>`:''}
     <label>${OCR?'…or paste':'Paste'} / type a list<textarea data-sbind="imp.text" placeholder="1 Sam Reid&#10;2 Ben Hall&#10;7 Jack Brown">${esc(I.text||'')}</textarea></label>
     ${I.err?`<div class="err">${esc(I.err)}</div>`:''}
     <button class="btn block lg" data-act="importParse">Read the list</button>`;
@@ -512,11 +512,12 @@ function importBody(){
 function parseRoster(text,existing){
   const rows=[];
   for(let line of String(text||'').split(/\r?\n/)){
-    line=line.replace(/[|•·_•]+/g,' ').replace(/\s+/g,' ').trim();
+    line=line.replace(/["|•·_]+/g,' ').replace(/\t+/g,' ').replace(/\s+/g,' ').trim();
+    if(/^(no\.?|number|num|#|shirt)?\s*[,;:]?\s*(name|player|players)\b/i.test(line))continue;
     if(!line)continue;
     let num=null,name=line,m;
-    if((m=line.match(/^#?\s*(\d{1,2})\s*[.):\-–—,]?\s+(.+)$/))){num=+m[1];name=m[2]}
-    else if((m=line.match(/^(.+?)[\s,\-–—:.]+#?(\d{1,2})$/))){name=m[1];num=+m[2]}
+    if((m=line.match(/^#?\s*(\d{1,2})(?:\s*[.):\-–—,;]\s*|\s+)(.+)$/))){num=+m[1];name=m[2]}
+    else if((m=line.match(/^(.+?)[\s,;\-–—:.]+#?(\d{1,2})$/))){name=m[1];num=+m[2]}
     name=name.replace(/[^A-Za-zÀ-ÿ'’\-. ]/g,'').replace(/\s+/g,' ').trim();
     if(name.length<2)continue;
     rows.push({num,name});
@@ -536,6 +537,19 @@ async function runOCR(file){
     I.rows=parseRoster(I.text,activePlayers().map(p=>p.num));
     if(!I.rows.length){I.rows=null;I.err="Couldn't find any names in that photo. Try a clearer shot, or type the list."}
   }catch(e){I.busy='';I.err="Couldn't read the photo — the reader needs a data connection the first time. You can paste or type the list instead."}
+  if(V.sheet&&V.sheet.kind==='import')renderSheet();
+}
+
+async function importFile(f){
+  const I=V.imp;I.err='';
+  if(/^image\//.test(f.type)||/\.(png|jpe?g|heic|webp)$/i.test(f.name)){
+    if(!OCR){I.err='Reading photos is only in the installed app. Type or paste the list instead.';renderSheet();return}
+    return runOCR(f)}
+  if(/\.(csv|tsv|txt)$/i.test(f.name)||/^text\//.test(f.type)){
+    try{I.text=await f.text();I.rows=parseRoster(I.text,activePlayers().map(p=>p.num));
+      if(!I.rows.length){I.rows=null;I.err="Couldn't find any players in that file. It should have one player per line, number and name."}}
+    catch(e){I.err="Couldn't open that file."}
+  }else I.err='That file type is not supported yet. Use CSV, text or a photo.';
   if(V.sheet&&V.sheet.kind==='import')renderSheet();
 }
 
@@ -755,6 +769,7 @@ document.addEventListener('input',e=>{
 document.addEventListener('change',e=>{
   const el=e.target;
   if(el.dataset.actChange==='ocr'&&el.files&&el.files[0])runOCR(el.files[0]);
+  else if(el.dataset.actChange==='impfile'&&el.files&&el.files[0])importFile(el.files[0]);
   else if(el.dataset.bind&&el.tagName==='SELECT'){render()}
 });
 document.addEventListener('click',e=>{
