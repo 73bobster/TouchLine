@@ -482,6 +482,7 @@ function squadView(){
   ${canEdit()?`<div class="row" style="margin-bottom:12px"><button class="btn" data-act="playerNew">+ Add player</button><button class="btn sec" data-act="importOpen">${OCR?'📷 ':''}Import list</button></div>`:`<div class="note" style="margin-top:0">View only. See the Stats tab for full numbers.</div>`}
  ${ps.length?`<div class="cols">`+ps.map(p=>`<div class="prow" data-act="${canEdit()?'playerEdit':'pstat'}" data-id="${p.id}" style="cursor:pointer"><div class="num">${esc(p.num)}</div><div class="nm">${esc(p.name)}<small>${esc(p.pos||'')}${p.pos&&statLine(p.id)?' · ':''}${esc(statLine(p.id))}</small></div><span style="color:var(--mute)">${canEdit()?'✎':'›'}</span></div>`).join('')+`</div>`
   :`<div class="empty"><b>No players yet</b>${canEdit()?'Add them one by one, or tap <b style="display:inline">Import list</b> to paste a list or photograph a team sheet.':'The coach has not added a squad yet.'}</div>`}
+  ${(()=>{const fm=S.players.filter(p=>p.left).sort((a,b)=>a.name.localeCompare(b.name));return fm.length?`<h2>Former players (${fm.length})</h2><div class="note" style="margin-top:0">Their numbers are free to reuse. Past matches and stats keep their records.</div><div class="cols">`+fm.map(p=>`<div class="prow out"><div class="num">${esc(p.num)}</div><div class="nm">${esc(p.name)}<small>${esc(statLine(p.id))}</small></div>${canEdit()?`<button class="btn sec" data-act="playerRestore" data-id="${p.id}" style="min-width:76px;padding:0 10px">Rejoin</button>`:''}</div>`).join('')+`</div>`:''})()}
   </main>`;
 }
 
@@ -605,6 +606,7 @@ function summaryView(m){
   <main>
   <div class="hero"><span class="res">${res}</span><div class="big">${sc.us} – ${sc.them}</div><div style="font-weight:700">${esc(S.team.name)} v ${esc(m.opp)}</div><div class="meta">${esc(m.comp||'')} · ${m.venue==='home'?'Home':m.venue==='away'?'Away':'Neutral'}${m.location?' · '+esc(m.location):''}</div></div>
   ${m.status==='live'?`<button class="btn block" data-act="continueMatch" style="margin:10px 0">Continue recording</button>`:''}
+  <div class="card" style="margin-top:12px"><div class="lbl" style="margin-top:0">Summary</div><p style="margin:4px 0 0;line-height:1.5">${esc(matchSummary(m))}</p></div>
   ${sec('Goals',goals.map(e=>row(e,esc(e.how==='Opp own goal'?'Opposition own goal':label(e.playerId))+(e.how&&e.how!=='Opp own goal'?` <span class="stat">${esc(e.how.toLowerCase())}</span>`:'')+(e.assistId?`<br><span class="stat">assist ${esc(label(e.assistId))}</span>`:''))))}
   ${sec('Goals against',against.map(e=>row(e,e.how==='Own goal'?'Own goal — '+esc(label(e.playerId)):esc([e.oppNum?'#'+e.oppNum:'',e.oppName||'Opposition'].filter(Boolean).join(' '))+(e.how?` <span class="stat">${esc(e.how.toLowerCase())}</span>`:''))))}
   ${sec('Substitutions',subs.map(e=>row(e,'↑ '+esc(label(e.onId))+'<br>↓ '+esc(label(e.offId))+(e.reason?` <span class="stat">${esc(e.reason.toLowerCase())}</span>`:''))))}
@@ -671,10 +673,10 @@ function renderSheet(){
     case 'confirm':
       html=sheetWrap(esc(s.title||'Are you sure?'),`<p style="margin-top:0">${esc(s.msg||'')}</p><div class="row"><button class="btn sec" data-act="cancelConfirm">${esc(s.cancel||'Cancel')}</button><button class="btn ${s.danger?'bad':''}" data-act="okConfirm">${esc(s.ok||'OK')}</button></div>`);break;
     case 'player':{
-      html=sheetWrap(d.id?'Edit player':'Add player',`<div class="row"><label style="flex:1">No.<input type="number" inputmode="numeric" class="big-in ${s.err&&/number/i.test(s.err)?'bad-in':''}" data-sbind="num" value="${esc(d.num)}"></label><label style="flex:3">Name<input data-sbind="name" value="${esc(d.name||'')}" autocomplete="off" placeholder="Full name"></label></div>
+      html=sheetWrap(d.restore?'Player rejoins the squad':d.id?'Edit player':'Add player',`<div class="row"><label style="flex:1">No.<input type="number" inputmode="numeric" class="big-in ${s.err&&/number/i.test(s.err)?'bad-in':''}" data-sbind="num" value="${esc(d.num)}"></label><label style="flex:3">Name<input data-sbind="name" value="${esc(d.name||'')}" autocomplete="off" placeholder="Full name"></label></div>
       <div class="lbl">Usual position (optional)</div>${chips(POS,'posPick',d.pos)}
       ${s.err?`<div class="err">${esc(s.err)}</div>`:''}
-      <div class="row"><button class="btn lg" data-act="playerSave" style="flex:2">Save</button>${d.id?`<button class="btn sec" data-act="playerRemove" style="color:var(--bad)">Remove</button>`:''}</div>`);
+      <div class="row"><button class="btn lg" data-act="playerSave" style="flex:2">Save</button>${d.id?`<button class="btn sec" data-act="playerRemove" style="color:var(--bad)">Left squad</button>`:''}</div>`);
       break}
     case 'import':html=sheetWrap('Import squad',importBody());break;
     case 'share':
@@ -783,6 +785,34 @@ const CONFIRMS={
   reset(){DB=blankDB();DB.user={id:'local',email:'',name:'You',isSuper:true};S=EMPTY();V.tab='match';V.matchId=null;V.draft={name:'',age:'',ground:'',primary:'#0b6b3a',secondary:'#ffffff',onPitch:11,periods:2,periodMins:45};save();V.sheet=null;render()}
 };
 
+function matchSummary(m){
+  const sc=score(m),ev=sortedEvents(m),live=m.status!=='done';
+  const nm=id=>{const p=P(id);return p?p.name:'a player'};
+  const res=sc.us>sc.them?'won':sc.us<sc.them?'lost':'drew';
+  const where=m.venue==='home'?'at home to':m.venue==='away'?'away to':'against';
+  const when=m.date?' on '+(()=>{try{return new Date(m.date+'T12:00').toLocaleDateString('en-GB',{day:'numeric',month:'long'})}catch(e){return m.date}})():'';
+  const out=[];
+  const state=sc.us>sc.them?'leading':sc.us<sc.them?'trailing':'level at';
+  out.push(live?`${S.team.name} are ${state} ${sc.us}–${sc.them} ${where} ${m.opp}${m.comp?' in the '+m.comp:''}.`
+    :`${S.team.name} ${res} ${sc.us}–${sc.them} ${where} ${m.opp}${m.comp?' in the '+m.comp:''}${when}.`);
+  const first=ev.filter(e=>e.period===1);
+  if(!live&&m.periods>=2&&ev.some(e=>e.t==='goal'||e.t==='oppgoal')){
+    const h=score({events:first});out.push(`It was ${h.us}–${h.them} at half-time.`)}
+  const gl=ev.filter(e=>e.t==='goal'&&e.how!=='Own goal');
+  if(gl.length){
+    const g={};gl.forEach(e=>{const k=e.how==='Opp own goal'?'opposition own goal':nm(e.playerId);(g[k]=g[k]||[]).push(fmtMin(e,m)+(e.how==='Penalty'?' (pen)':''))});
+    out.push('Scorers: '+Object.keys(g).map(k=>k+' '+g[k].join(', ')).join('; ')+'.');
+    const as=gl.filter(e=>e.assistId).map(e=>nm(e.assistId));
+    if(as.length)out.push('Assists: '+as.join(', ')+'.')}
+  const ag=ev.filter(e=>e.t==='oppgoal'||(e.t==='goal'&&e.how==='Own goal'));
+  if(ag.length)out.push('Conceded: '+ag.map(e=>(e.t==='goal'?'own goal by '+nm(e.playerId):(e.oppName||'opposition'))+' '+fmtMin(e,m)+(e.how==='Penalty'?' (pen)':'')).join(', ')+'.');
+  if(!gl.length&&!ag.length&&!live)out.push('A goalless draw.');
+  const yc=ev.filter(e=>e.t==='yellow').length,rc=ev.filter(e=>e.t==='red');
+  if(yc||rc.length)out.push('Discipline: '+[yc?yc+' yellow'+(yc>1?'s':''):'',rc.length?rc.length+' red ('+rc.map(e=>nm(e.playerId)).join(', ')+')':''].filter(Boolean).join(', ')+'.');
+  const sb=ev.filter(e=>e.t==='sub').length;
+  if(sb)out.push(sb+' substitution'+(sb>1?'s':'')+' made.');
+  return out.join(' ');
+}
 function shareText(m){
   const sc=score(m);const ev=sortedEvents(m);
   const head=`FT ⚽ ${S.team.name} ${sc.us}–${sc.them} ${m.opp}`;
@@ -793,7 +823,7 @@ function shareText(m){
   const og=ev.filter(e=>e.t==='goal'&&e.how==='Own goal').length;
   const ag=ev.filter(e=>e.t==='oppgoal').map(e=>`${fmtMin(e,m)} ${[e.oppNum?'#'+e.oppNum:'',e.oppName||''].filter(Boolean).join(' ')||'Opposition'}`);
   const cards=ev.filter(e=>e.t==='yellow'||e.t==='red').map(e=>`${e.t==='yellow'?'🟨':'🟥'} ${P(e.playerId)?P(e.playerId).name:''}`);
-  return [head,meta,'',gl.length?'Goals:\n'+gl.join('\n'):'',ag.length||og?'Against:\n'+ag.join('\n')+(og?'\n(plus '+og+' own goal'+(og>1?'s':'')+')':''):'',cards.length?cards.join('\n'):'',m.notes?'\n'+m.notes:''].filter(x=>x!=='').join('\n');
+  return [head,meta,'',matchSummary(m),'',gl.length?'Goals:\n'+gl.join('\n'):'',ag.length||og?'Against:\n'+ag.join('\n')+(og?'\n(plus '+og+' own goal'+(og>1?'s':'')+')':''):'',cards.length?cards.join('\n'):'',m.notes?'\n'+m.notes:''].filter(x=>x!=='').join('\n');
 }
 
 function act(a,ds,el){
@@ -822,6 +852,7 @@ function act(a,ds,el){
 
     /* squad */
     case 'playerNew':V.sheet={kind:'player',d:{num:nextNum(),name:'',pos:''}};renderSheet();return;
+    case 'playerRestore':{const p=P(ds.id);V.sheet={kind:'player',d:{id:p.id,num:p.num,name:p.name,pos:p.pos||'',restore:true}};renderSheet();return}
     case 'playerEdit':{const p=P(ds.id);V.sheet={kind:'player',d:{id:p.id,num:p.num,name:p.name,pos:p.pos||''}};renderSheet();return}
     case 'posPick':{const d=V.sheet.d;d.pos=d.pos===ds.val?'':ds.val;renderSheet();return}
     case 'playerSave':{
@@ -829,10 +860,10 @@ function act(a,ds,el){
       if(!(num>=0&&num<=99)){s.err='Enter a squad number.';renderSheet();return}
       if(!String(d.name||'').trim()){s.err='Enter a name.';renderSheet();return}
       if(activePlayers().some(p=>p.num===num&&p.id!==d.id)){s.err='Number '+num+' is already taken.';renderSheet();return}
-      if(d.id){const p=P(d.id);p.num=num;p.name=d.name.trim();p.pos=d.pos}
+      if(d.id){const p=P(d.id);p.num=num;p.name=d.name.trim();p.pos=d.pos;if(d.restore)p.left=false}
       else S.players.push({id:uid(),num,name:d.name.trim(),pos:d.pos,left:false});
       save();V.sheet=null;break}
-    case 'playerRemove':ask({title:'Remove '+V.sheet.d.name+'?',msg:'They leave the squad. Their past match records stay.',ok:'Remove',danger:true,fn:'playerRemove',arg:V.sheet.d.id});return;
+    case 'playerRemove':ask({title:V.sheet.d.name+' has left the squad?',msg:'Their number becomes free for someone else. Their past match records stay, and you can bring them back from Former players.',ok:'Yes, they left',danger:true,fn:'playerRemove',arg:V.sheet.d.id});return;
     case 'importOpen':V.imp={text:'',rows:null,busy:'',err:''};V.sheet={kind:'import'};renderSheet();return;
     case 'importParse':{
       const I=V.imp;I.rows=parseRoster(I.text,activePlayers().map(p=>p.num));
@@ -1515,7 +1546,7 @@ function sheetExtra(s,m,d){
 }
 
 /* ---------- extra actions ---------- */
-const EDIT_ACTS=new Set(['playerNew','playerEdit','playerSave','playerRemove','importOpen','importParse','importAdd','importBack','importDel','matchNew','venue','matchNext','backDetails','cancelMatch','role','reason','restSub','toLive','editLineup','ko','pause','resume','endPeriod','nextPeriod','finishEarly','finish','ev','pick','oppSave','noteSave','evNew','evEdit','evSave','evDel','attSet','attAll','attMins','attEarly','attReason','sessNew','sessEdit','sessSave','sessDel','recMode','recDefault','tapPlayer','tapBench','tapDo','tapOn','preset','fmt']);
+const EDIT_ACTS=new Set(['playerNew','playerEdit','playerRestore','playerSave','playerRemove','importOpen','importParse','importAdd','importBack','importDel','matchNew','venue','matchNext','backDetails','cancelMatch','role','reason','restSub','toLive','editLineup','ko','pause','resume','endPeriod','nextPeriod','finishEarly','finish','ev','pick','oppSave','noteSave','evNew','evEdit','evSave','evDel','attSet','attAll','attMins','attEarly','attReason','sessNew','sessEdit','sessSave','sessDel','recMode','recDefault','tapPlayer','tapBench','tapDo','tapOn','preset','fmt']);
 function genCode(){const A='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';const b=new Uint8Array(8);(window.crypto||{getRandomValues:a=>{for(let i=0;i<a.length;i++)a[i]=Math.random()*256}}).getRandomValues(b);return Array.from(b,x=>A[x%A.length]).join('')}
 async function syncWait(){for(let i=0;i<30&&SYNC.busy;i++)await new Promise(r=>setTimeout(r,300));SYNC.state='idle';await syncNow(true)}
 async function refreshMembers(){
@@ -1656,7 +1687,7 @@ document.addEventListener('visibilitychange',()=>{if(!document.hidden){const m=M
 render();
 if(CLOUD&&DB.user)setTimeout(()=>syncNow(),300);
 if('serviceWorker' in navigator&&/^https?:$/.test(location.protocol)){navigator.serviceWorker.register('sw.js').catch(()=>{})}
-window.__touchline={S:()=>S,DB:()=>DB,V,act,render,parseRoster,syncNow,rowsFor,pendingCount};
+window.__touchline={matchSummary,applyRows,S:()=>S,DB:()=>DB,V,act,render,parseRoster,syncNow,rowsFor,pendingCount};
 })();
 </script>
 </body>
