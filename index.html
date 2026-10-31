@@ -357,6 +357,33 @@ main.lvm{padding-top:4px}
 .tk b s{text-decoration:none}
 .tk b s .rx{background:#fff;border-radius:50%;width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;font-size:12px;line-height:1;box-shadow:0 0 0 1px #d32f2f}
 [data-theme=dark] .lt .pos{color:#6fdc9b}[data-theme=dark] .lt .neg{color:#f08a80}
+
+/* team sheet */
+.ts-bar{display:flex;gap:8px;padding:calc(10px + env(safe-area-inset-top)) 12px 6px;background:var(--bg);position:sticky;top:0;z-index:5}
+.ts-bar .btn{flex:1;min-height:44px;padding:0 8px;font-size:14px}.ts-bar .btn:nth-child(2){flex:2}
+.ts-doc{background:#fff;color:#111;border-radius:12px;padding:16px;border:1px solid var(--line)}
+.ts-doc h1{font-size:22px;letter-spacing:.12em;text-align:center;margin:0}
+.ts-vs{text-align:center;font-size:18px;font-weight:800;margin:4px 0 10px}.ts-vs i{font-weight:400;color:#666}
+.ts-meta{display:grid;grid-template-columns:1fr 1fr;gap:6px 14px;font-size:13px;margin-bottom:12px}
+.ts-meta div{display:flex;flex-direction:column;border-bottom:1px solid #bbb;min-height:34px;justify-content:flex-end}
+.ts-meta span{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#666}
+.ts-cols{display:grid;grid-template-columns:1fr;gap:16px}
+.ts-col h2{font-size:15px;margin:0 0 6px;padding:4px 8px;background:#111;color:#fff;border-radius:4px}
+.ts-doc table{width:100%;border-collapse:collapse;margin-bottom:10px;font-size:14px}
+.ts-doc th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#555;border-bottom:2px solid #111;padding:3px 4px}
+.ts-doc td{border-bottom:1px solid #999;padding:5px 4px;height:27px}
+.ts-doc .bn{width:44px;text-align:center;font-weight:800}.ts-doc .bp{width:50px;text-align:center;color:#444;font-size:12px}
+.ts-sig{display:flex;align-items:flex-end;gap:8px;font-size:12px;color:#444;margin-top:8px}.ts-sig span{flex:1;border-bottom:1px solid #111;height:22px}
+.ts-foot{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:14px}
+@media (min-width:700px){.ts-cols{grid-template-columns:1fr 1fr}.ts-doc{padding:24px}}
+@media print{
+  header.top,.tabs,.noprint,#sheet,#toast,.gear{display:none!important}
+  body,#app,main{background:#fff!important;color:#111!important;padding:0!important}
+  .ts-doc{border:0;border-radius:0;padding:0}
+  .ts-col h2{-webkit-print-color-adjust:exact;print-color-adjust:exact;background:#111!important;color:#fff!important}
+  .ts-cols{grid-template-columns:1fr 1fr}
+  @page{size:A4;margin:14mm}
+}
 </style>
 </head>
 <body>
@@ -668,6 +695,7 @@ function detailsView(m){
   <div class="seg">${[['home','Home'],['away','Away'],['neutral','Neutral']].map(([k,l])=>`<button class="${m.venue===k?'on':''}" data-act="venue" data-v="${k}">${l}</button>`).join('')}</div>
   <label>Ground / pitch<input data-bind="m.location" value="${esc(m.location)}" placeholder="${m.venue==='home'?'Your home ground':'Where is it?'}" autocomplete="off"></label>
   <label>Competition<input data-bind="m.comp" list="compl" value="${esc(m.comp)}" placeholder="League, cup, friendly…" autocomplete="off"></label><datalist id="compl">${comps.map(o=>`<option value="${esc(o)}">`).join('')}</datalist>
+  <label>Referee<input data-bind="m.referee" value="${esc(m.referee||'')}" placeholder="Referee's name (optional)" autocomplete="off"></label>
   <div class="row"><label>Date<input type="date" data-bind="m.date" value="${esc(m.date)}"></label><label>Kick-off<input type="time" data-bind="m.time" value="${esc(m.time)}"></label></div>
   <div class="note">${m.onPitch}-a-side · ${m.periods} × ${m.periodMins} mins (from your team format)</div>
   ${V.err?`<div class="err">${esc(V.err)}</div>`:''}
@@ -938,7 +966,7 @@ function lineupView(m){
   <div class="hint">Drag players to move them, or tap a player and then tap where they should go. Moving onto someone swaps the two.</div>
   ${V.err?`<div class="err">${esc(V.err)}</div>`:''}
   <div class="row"><button class="btn sec" data-act="backDetails">← Details</button><button class="btn lg" data-act="toLive" style="flex:2">Match screen →</button></div>
-  <div style="text-align:center;margin-top:6px"><button class="linkbtn" data-act="luList">Use the list instead</button></div>
+  <div style="text-align:center;margin-top:6px"><button class="linkbtn" data-act="teamSheet" data-id="${m.id}">📄 Team sheet for the referee</button> · <button class="linkbtn" data-act="luList">Use the list instead</button></div>
   </main>`;
 }
 function lineupList(m){
@@ -957,10 +985,49 @@ function lineupList(m){
   ${cnt.none&&cnt.starter?`<button class="btn sec block" data-act="restSub" style="margin-bottom:10px">Everyone else is a sub (${cnt.none})</button>`:''}
   ${V.err?`<div class="err">${esc(V.err)}</div>`:''}
   <div class="row"><button class="btn sec" data-act="backDetails">← Details</button><button class="btn lg" data-act="toLive" style="flex:2">Match screen →</button></div>
-  <div style="text-align:center;margin-top:6px"><button class="linkbtn" data-act="luList">Back to the pitch view</button></div>
+  <div style="text-align:center;margin-top:6px"><button class="linkbtn" data-act="teamSheet" data-id="${m.id}">📄 Team sheet for the referee</button> · <button class="linkbtn" data-act="luList">Back to the pitch view</button></div>
   </main>`;
 }
 
+
+/* ---------- formal team sheet (print / PDF / share) ---------- */
+function sheetLists(m){
+  const sp=startPos(m);
+  const xy=id=>POSITIONS[sp[id]]||[50,50];
+  const starters=Object.keys(m.squad).filter(id=>P(id)&&m.squad[id].role==='starter').sort((a,b)=>xy(b)[1]-xy(a)[1]||xy(a)[0]-xy(b)[0]);
+  const subs=byNum(Object.keys(m.squad).filter(id=>P(id)&&m.squad[id].role==='sub'));
+  return{sp,starters,subs};
+}
+const venueWord=m=>m.venue==='home'?'Home':m.venue==='away'?'Away':'Neutral';
+function teamSheetText(m){
+  const {sp,starters,subs}=sheetLists(m);
+  return ['TEAM SHEET',S.team.name+' v '+m.opp,[dateStr(m),m.time?'KO '+m.time:''].filter(Boolean).join(' · '),[m.comp,venueWord(m),m.location].filter(Boolean).join(' · '),m.referee?'Referee: '+m.referee:null,m.formation?'Formation: '+m.formation:null,'','STARTING',...starters.map(id=>P(id).num+'  '+P(id).name+(sp[id]?'  ('+sp[id]+')':'')),'','SUBSTITUTES',...subs.map(id=>P(id).num+'  '+P(id).name)].filter(x=>x!==null&&x!==undefined&&x!==false).map(x=>x||' ').join('\n').replace(/\n +\n/g,'\n\n');
+}
+function teamSheetView(m){
+  const {sp,starters,subs}=sheetLists(m);
+  const blank=n=>Array.from({length:n},()=>'<tr><td class="bn"></td><td></td><td class="bp"></td></tr>').join('');
+  const mine=(ids,showPos)=>ids.map(id=>`<tr><td class="bn">${esc(P(id).num)}</td><td>${esc(P(id).name)}</td><td class="bp">${showPos?esc(sp[id]||''):''}</td></tr>`).join('');
+  const kv=(k,v)=>v?`<div><span>${k}</span><b>${esc(v)}</b></div>`:`<div><span>${k}</span><b class="bl">&nbsp;</b></div>`;
+  return `<div class="noprint ts-bar"><button class="btn sec" data-act="tsBack">‹ Back</button><button class="btn" data-act="tsPrint">🖨 Print / save as PDF</button><button class="btn sec" data-act="tsShare">Share</button></div>
+  <main class="tsheet"><div class="ts-doc">
+   <h1>TEAM SHEET</h1>
+   <div class="ts-vs">${esc(S.team.name)} <i>v</i> ${esc(m.opp||'Opposition')}</div>
+   <div class="ts-meta">${kv('Date',dateStr(m))}${kv('Kick-off',m.time||'')}${kv('Competition',m.comp||'')}${kv('Venue',[venueWord(m),m.location].filter(Boolean).join(' · '))}${kv('Referee',m.referee||'')}${m.formation?kv('Formation',m.formation):''}</div>
+   <div class="ts-cols">
+    <div class="ts-col"><h2>${esc(S.team.name)}</h2>
+     <table><thead><tr><th class="bn">No.</th><th>Starting</th><th class="bp">Pos</th></tr></thead><tbody>${mine(starters,true)}</tbody></table>
+     <table><thead><tr><th class="bn">No.</th><th>Substitutes</th><th class="bp"></th></tr></thead><tbody>${mine(subs,false)}</tbody></table>
+     <div class="ts-sig">Captain <span></span></div>
+    </div>
+    <div class="ts-col"><h2>${esc(m.opp||'Opposition')}</h2>
+     <table><thead><tr><th class="bn">No.</th><th>Starting</th><th class="bp">Pos</th></tr></thead><tbody>${blank(Math.max(m.onPitch||11,starters.length))}</tbody></table>
+     <table><thead><tr><th class="bn">No.</th><th>Substitutes</th><th class="bp"></th></tr></thead><tbody>${blank(Math.max(subs.length,6))}</tbody></table>
+     <div class="ts-sig">Captain <span></span></div>
+    </div>
+   </div>
+   <div class="ts-foot"><div class="ts-sig">Manager <span></span></div><div class="ts-sig">Referee <span></span></div></div>
+  </div></main>`;
+}
 /* ---------- recording format bar (bottom of the screen) ---------- */
 const REC_MODES=[['buttons','Buttons','Big buttons, no pitch'],['drag','Drag','Drag players onto the goal and actions'],['drag2','Side drag','Bench left, pitch middle, actions right'],['tap','Tap','Tap players on the pitch']];
 function modeBar(){
@@ -1032,6 +1099,7 @@ function liveView(m,ro){
   <div class="row"><button class="btn sec" data-act="logOpen" data-id="${m.id}">${ro?'Full log':'Full log & fixes'}</button>${!ro&&st!=='full'&&st!=='ready'?`<button class="btn sec" data-act="finishEarly">End match early</button>`:''}</div>
   ${ro?'':modeBar()}
   ${!ro&&st==='ready'?`<div style="text-align:center;margin-top:8px"><button class="linkbtn" data-act="editLineup">← Edit team</button></div>`:''}
+  ${st==='ready'?`<div style="text-align:center;margin-top:4px"><button class="linkbtn" data-act="teamSheet" data-id="${m.id}">📄 Team sheet for the referee</button></div>`:''}
   <h2>Players</h2><div id="ptab">${liveTable(m)}</div>
   </div></div>
   </main>`;
@@ -1081,6 +1149,7 @@ function summaryView(m){
    ${squadBy('out').length?`<div class="lbl" style="margin-top:10px">Not available</div><div>${squadBy('out').map(id=>esc(label(id))+` <span class="stat">${esc((m.squad[id].reason||'Unknown').toLowerCase())}</span>`).join('<br>')}</div>`:''}
   </div>
   <fieldset ${canEdit()?'':'disabled'}><label>Match report / coach notes<textarea data-bind="m.notes" placeholder="How did it go? What to work on?">${esc(m.notes||'')}</textarea></label></fieldset>
+  <div class="row"><button class="btn sec" data-act="teamSheet" data-id="${m.id}">📄 Team sheet</button></div>
   <div class="row"><button class="btn" data-act="share">Share summary</button><button class="btn sec" data-act="logOpen" data-id="${m.id}">${canEdit()?'Full log & edit':'Full log'}</button></div>
   </main>`;
 }
@@ -1224,7 +1293,7 @@ async function importFile(f){
 /* ---------- actions ---------- */
 function newMatch(){
   const t=S.team;const last=S.matches.slice().sort((a,b)=>b.createdAt-a.createdAt)[0];
-  const m={id:uid(),opp:'',venue:'home',location:t.ground||'',comp:last?last.comp:'League',date:todayStr(),time:nowHM(),squad:{},events:[],status:'setup',periods:t.periods,periodMins:t.periodMins,onPitch:t.onPitch,clock:{period:1,state:'ready',startedAt:null,accMs:0},notes:'',createdAt:Date.now()};
+  const m={id:uid(),opp:'',venue:'home',location:t.ground||'',comp:last?last.comp:'League',date:todayStr(),time:nowHM(),squad:{},events:[],status:'setup',periods:t.periods,periodMins:t.periodMins,onPitch:t.onPitch,clock:{period:1,state:'ready',startedAt:null,accMs:0},notes:'',referee:'',createdAt:Date.now()};
   S.matches.push(m);S.activeId=m.id;V.step='details';V.err='';save();
 }
 function addEvent(m,o){
@@ -1298,7 +1367,7 @@ function act(a,ds,el){
   const m=M();
   if(actExtra(a,ds,el))return;
   switch(a){
-    case 'tab':V.tab=ds.tab;V.matchId=null;V.sheet=null;V.sess=null;V.newTeam=false;break;
+    case 'tab':V.ts=null;V.tab=ds.tab;V.matchId=null;V.sheet=null;V.sess=null;V.newTeam=false;break;
     case 'createTeam':{
       const t=V.draft;if(!t.name.trim()){V.err='Give your team a name first.';break}
       V.err='';S.team=Object.assign({},t,{name:t.name.trim()});save();V.tab='squad';break}
@@ -1576,7 +1645,7 @@ function rowsFor(TD){
   R.teams[tid]={id:tid,name:t.name||'',age:t.age||'',ground:t.ground||'',primary_colour:t.primary||null,secondary_colour:t.secondary||null,on_pitch:num(t.onPitch),periods:num(t.periods),period_mins:num(t.periodMins),deleted:false};
   TD.players.forEach(p=>{R.players[p.id]={id:p.id,team_id:tid,num:num(p.num),name:p.name||'',pos:p.pos||null,left_squad:!!p.left,screen_name:p.screen||null,start_date:p.start||null,end_date:p.end||null,injured:!!p.injured,injury_note:p.injNote||null,return_date:p.ret||null,deleted:false}});
   TD.matches.forEach(m=>{
-    R.matches[m.id]={id:m.id,team_id:tid,opp:m.opp||'',venue:m.venue||'home',location:m.location||'',comp:m.comp||'',match_date:m.date||null,match_time:m.time||null,status:m.status||'setup',periods:num(m.periods),period_mins:num(m.periodMins),on_pitch:num(m.onPitch),clock:m.clock||null,notes:m.notes||'',formation:m.formation||null,rec_mode:m.recMode||null,created_at_ms:m.createdAt||null,finished_at_ms:m.finishedAt||null,deleted:false};
+    R.matches[m.id]={id:m.id,team_id:tid,opp:m.opp||'',venue:m.venue||'home',location:m.location||'',comp:m.comp||'',match_date:m.date||null,match_time:m.time||null,status:m.status||'setup',periods:num(m.periods),period_mins:num(m.periodMins),on_pitch:num(m.onPitch),clock:m.clock||null,notes:m.notes||'',referee:m.referee||null,formation:m.formation||null,rec_mode:m.recMode||null,created_at_ms:m.createdAt||null,finished_at_ms:m.finishedAt||null,deleted:false};
     for(const pid in m.squad){const r=m.squad[pid];R.match_squad[m.id+'|'+pid]={match_id:m.id,player_id:pid,team_id:tid,role:r.role,reason:r.reason||null,pos:r.pos||null,deleted:false}}
     m.events.forEach(e=>{R.match_events[e.id]={id:e.id,team_id:tid,match_id:m.id,seq:0,type:e.t,player_id:e.playerId||null,assist_id:e.assistId||null,off_id:e.offId||null,on_id:e.onId||null,how:e.how||null,detail:e.detail||null,reason:e.reason||null,opp_num:e.oppNum===undefined||e.oppNum===''||e.oppNum===null?null:String(e.oppNum),opp_name:e.oppName||null,note_text:e.t==='period'?(e.label||null):(e.text||null),period:num(e.period),minute:num(e.minute),ts:e.ts||null,deleted:false}});
   });
@@ -1627,7 +1696,7 @@ function applyRows(tb,rows,TD){
       case 'matches':{
         if(del){TD.matches=TD.matches.filter(x=>x.id!==r.id);if(TD.activeId===r.id)TD.activeId=null;break}
         let m=TD.matches.find(x=>x.id===r.id);if(!m){m={id:r.id,squad:{},events:[]};TD.matches.push(m)}
-        Object.assign(m,{opp:r.opp||'',venue:r.venue||'home',location:r.location||'',comp:r.comp||'',date:r.match_date||'',time:r.match_time||'',status:r.status,periods:r.periods,periodMins:r.period_mins,onPitch:r.on_pitch,clock:r.clock||{period:1,state:'ready',startedAt:null,accMs:0},notes:r.notes||'',formation:r.formation||'',recMode:r.rec_mode||undefined,createdAt:r.created_at_ms||0,finishedAt:r.finished_at_ms||undefined});break}
+        Object.assign(m,{opp:r.opp||'',venue:r.venue||'home',location:r.location||'',comp:r.comp||'',date:r.match_date||'',time:r.match_time||'',status:r.status,periods:r.periods,periodMins:r.period_mins,onPitch:r.on_pitch,clock:r.clock||{period:1,state:'ready',startedAt:null,accMs:0},notes:r.notes||'',referee:r.referee||'',formation:r.formation||'',recMode:r.rec_mode||undefined,createdAt:r.created_at_ms||0,finishedAt:r.finished_at_ms||undefined});break}
       case 'match_squad':{
         const m=TD.matches.find(x=>x.id===r.match_id);if(!m)break;
         if(del)delete m.squad[r.player_id];else m.squad[r.player_id]={role:r.role,reason:r.reason||'',pos:r.pos||''};break}
@@ -1991,7 +2060,7 @@ async function loadInvites(){
 const inviteLink=c=>location.origin+location.pathname+'?invite='+c;
 
 /* ---------- export every match, who started where, and every action, as CSV for Excel ---------- */
-const CSV_HEAD=['Team','Match ID','Date','Time','Opponent','Venue','Competition','Match status','Final score','Row type','Period','Minute','Shirt','Player','Position','Role','Reason','Minutes played','Event','Detail','Assist shirt','Assist player','Off shirt','Off player','On shirt','On player','Opp number','Opp name','Note','Positive/Negative','Score after (us)','Score after (them)'];
+const CSV_HEAD=['Team','Match ID','Date','Time','Opponent','Venue','Competition','Referee','Match status','Final score','Row type','Period','Minute','Shirt','Player','Position','Role','Reason','Minutes played','Event','Detail','Assist shirt','Assist player','Off shirt','Off player','On shirt','On player','Opp number','Opp name','Note','Positive/Negative','Score after (us)','Score after (them)'];
 const EV_NAME={goal:'Goal',oppgoal:'Goal against',shot:'Shot',keypass:'Key pass',save:'Key save',tackle:'Key defending',mistake:'Mistake',yellow:'Yellow card',red:'Red card',sub:'Substitution',move:'Position move',note:'Note',period:'Period'};
 function csvCell(v){
   if(v===null||v===undefined)return '';
@@ -2005,7 +2074,7 @@ function csvBuild(){
   const pn=id=>P(id)?P(id).name:'';const sh=id=>P(id)?P(id).num:'';
   for(const m of ms){
     const sc=score(m);
-    const base=[S.team.name,m.id,m.date,m.time||'',m.opp,m.venue||'',m.comp||'',m.status,sc.us+'-'+sc.them];
+    const base=[S.team.name,m.id,m.date,m.time||'',m.opp,m.venue||'',m.comp||'',m.referee||'',m.status,sc.us+'-'+sc.them];
     const sp=startPos(m);
     const ids=Object.keys(m.squad).filter(id=>P(id)).sort((a,b)=>{const o={starter:0,sub:1,out:2};return (o[m.squad[a].role]-o[m.squad[b].role])||(P(a).num-P(b).num)});
     for(const id of ids){
@@ -2159,6 +2228,10 @@ function actExtra(a,ds,el){
 
     case 'pstat':V.sheet={kind:'pstat',d:{id:ds.id}};renderSheet();return true;
     case 'settings':V.sheet={kind:'settings',d:{}};renderSheet();return true;
+    case 'teamSheet':V.ts=ds.id;V.sheet=null;render();window.scrollTo(0,0);return true;
+    case 'tsBack':V.ts=null;render();return true;
+    case 'tsPrint':try{window.print()}catch(e){toast('Printing is not available here. Use Share instead.')}return true;
+    case 'tsShare':{const m=S.matches.find(x=>x.id===V.ts);const t=teamSheetText(m);if(navigator.share){navigator.share({title:'Team sheet',text:t}).catch(()=>{})}else{try{navigator.clipboard.writeText(t);toast('Team sheet copied')}catch(e){V.sheet={kind:'share',title:'Team sheet',d:{text:t}};renderSheet()}}return true}
     case 'exportCsv':exportCsv();return true;
     case 'setPref':DB.prefs[ds.k]=ds.v;save();applyTheme();render();return true;
     case 'setAccent':DB.prefs.accent=ds.i===''?null:[PRESETS[+ds.i][1],PRESETS[+ds.i][2]];save();applyTheme();render();return true;
@@ -2238,7 +2311,8 @@ function render(){
   if(CLOUD&&!DB.user){app.innerHTML=authView();renderSheet();return}
   if(!S.team||V.newTeam){app.innerHTML=CLOUD?noTeamView():onboard();renderSheet();return}
   let body='';
-  if(V.tab==='team')body=teamView();
+  if(V.ts&&S.matches.find(x=>x.id===V.ts))body=teamSheetView(S.matches.find(x=>x.id===V.ts));
+  else if(V.tab==='team')body=teamView();
   else if(V.tab==='squad')body=squadView();
   else if(V.tab==='stats')body=statsView();
   else if(V.tab==='attend')body=attendView();
