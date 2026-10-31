@@ -339,7 +339,7 @@ main.lvm{padding-top:4px}
 .d2 .bench{max-height:128px}
 .d2{--d2h:clamp(280px,calc(100dvh - 365px),700px);display:grid;grid-template-columns:minmax(0,1fr) 76px;gap:6px;margin:4px 0 6px}
 .d2 .pitch{height:min(var(--d2h),calc((100vw - 110px)*1.75))}
-.d2{--d2h:min(clamp(280px,calc(100dvh - 365px),700px),calc((100vw - 110px)*1.75))}
+.d2{--d2h:min(clamp(280px,calc(100dvh - 375px),700px),calc((100vw - 110px)*1.85))}
 .d2 .pitch{height:auto!important;align-self:stretch;min-height:280px}
 .d2 .acts{height:var(--d2h);align-self:start}
 .d2 .bench{grid-column:1/-1;margin:0;min-height:62px}
@@ -399,7 +399,12 @@ main.lvm{padding-top:4px}
 .capbtn{min-height:46px;margin:0 0 8px;font-weight:700}
 
 /* pins, team stats, minutes on tokens */
-.tk .gm{font-size:9px;font-weight:800;color:#fff;background:rgba(0,0,0,.6);border-radius:8px;padding:0 5px;line-height:13px;margin-top:1px}
+.tk b:has(.gm){flex-direction:column;line-height:1}
+.tk b .gm{font-size:9px;font-weight:800;opacity:.85;line-height:1;margin-top:1px;font-style:normal}
+.d2 .tk b:has(.gm),.lv-a .tk b:has(.gm){width:46px;height:46px;font-size:15px}
+.d2 .tk b:has(.gm){border-width:2px}
+.d2 .bench .tk{width:56px}
+.d2 .bench{min-height:0;max-height:none;padding:4px 6px;gap:2px 4px}
 .lv-a .bench{max-height:172px}.d2 .bench{max-height:156px}
 .row2{display:flex;gap:8px;margin:0 0 6px}.row2 .notebtn{flex:1;margin:0}
 .pinpitch{position:relative;width:100%;aspect-ratio:68/52.5;max-height:56vh;background:#2e8b4a;border:3px solid #1f6b37;border-radius:14px;overflow:hidden;touch-action:manipulation;cursor:crosshair}
@@ -950,7 +955,7 @@ function tokenHtml(id,o){
   const base=o.drag
     ?`data-drag="1" data-id="${id}" data-where="${o.where}" ${o.drop?'data-drop="tok"':''} ${o.act?`data-act="${o.act}"`:''}`
     :`data-act="${o.act}" data-id="${id}"`;
-  return `<div class="tk${xy?' at':''}${o.sel?' sel':''}" ${base}${st}>${o.pos?`<i class="pp">${o.pos}</i>`:''}<b>${esc(p.num)}${o.goals?`<em>⚽${o.goals>1?o.goals:''}</em>`:''}${o.yel?'<u></u>':''}${o.cap?'<strong class="cp">C</strong>':''}${o.inj?'<s>'+RX+'</s>':''}</b><span>${esc(sname(p))}</span>${o.mins!==undefined?`<small class="gm" data-gm="${id}">${o.mins}'</small>`:''}${o.note?`<small class="nt">${esc(o.note)}</small>`:''}</div>`;
+  return `<div class="tk${xy?' at':''}${o.sel?' sel':''}" ${base}${st}>${o.pos?`<i class="pp">${o.pos}</i>`:''}<b>${esc(p.num)}${o.goals?`<em>⚽${o.goals>1?o.goals:''}</em>`:''}${o.yel?'<u></u>':''}${o.cap?'<strong class="cp">C</strong>':''}${o.inj?'<s>'+RX+'</s>':''}${o.mins!==undefined?`<small class="gm" data-gm="${id}">${o.mins}'</small>`:''}</b><span>${esc(sname(p))}</span>${o.note?`<small class="nt">${esc(o.note)}</small>`:''}</div>`;
 }
 function matchBadges(m){
   const goals={},yel={};
