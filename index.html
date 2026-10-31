@@ -82,7 +82,7 @@ button[disabled]{opacity:.45}
 .evg button i{font-style:normal;font-size:24px}
 .evg button.big{min-height:92px;font-size:16px}
 .evg .big.g{background:var(--p);color:var(--pt);border-color:var(--p);grid-column:span 2}
-.evg .big.a{background:#26323a;color:#fff;border-color:#26323a;grid-column:span 1}
+.evg .big.a{background:#d32f2f;color:#fff;border-color:#d32f2f;grid-column:span 1}
 .log{display:flex;gap:10px;align-items:flex-start;padding:9px 0;border-bottom:1px solid var(--line);font-size:15px}
 .log .mn{width:52px;flex:none;font-weight:800;font-variant-numeric:tabular-nums}
 .log .tx{flex:1;min-width:0}.log .tx small{display:block;color:var(--mute)}
@@ -95,6 +95,7 @@ button[disabled]{opacity:.45}
 .sheet-h button{min-height:44px;min-width:44px;padding:0 10px;background:#eef2ef}
 .pg{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px}
 .pb{min-height:66px;background:#fff;border:2px solid var(--line);border-radius:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:4px;gap:0}
+.pb{position:relative}.pb .pbx{position:absolute;top:4px;right:4px;text-decoration:none;line-height:1}.pb .pbx .rx{background:#fff;border-radius:50%;width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;font-size:13px;box-shadow:0 0 0 1px #d32f2f;color:#d32f2f}
 .pb b{font-size:24px;line-height:1.1}.pb span{font-size:13px;color:var(--mute);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pb.alt{background:#f3f5f4;border-style:dashed}
 .big-in{font-size:22px;text-align:center}
@@ -500,7 +501,7 @@ const EVBTN=[
  {k:'goal',l:'Goal',i:'⚽',c:'big g'},{k:'oppgoal',l:'Goal against',i:'🥅',c:'big a'},
  {k:'shot',l:'Shot',i:'🎯'},{k:'keypass',l:'Key pass',i:'🔑'},{k:'save',l:'Key save',i:'🧤'},
  {k:'tackle',l:'Key tackle',i:'🛡️'},{k:'mistake',l:'Mistake',i:'❌'},{k:'yellow',l:'Yellow',i:'🟨'},{k:'red',l:'Red',i:'🟥'},
- {k:'sub',l:'Sub',i:'🔄'},{k:'move',l:'Move',i:'↔️'},{k:'team',l:'Team stats',i:'📊'},{k:'note',l:'Note',i:'📝'}
+ {k:'sub',l:'Sub',i:'🔄'},{k:'move',l:'Move',i:'↔️'},{k:'team',l:'Team stats',i:'📊'},{k:'note',l:'Note',i:'📝'},{k:'balance',l:'Balance time',i:'⚖️'}
 ];
 
 /* ---------- state ---------- */
@@ -1446,7 +1447,7 @@ function liveView(m,ro){
   }
   const stText={ready:'Ready',running:'Playing',paused:'Stopped',break:(m.periods===2?'Half time':'Break'),full:'Full time'}[st];
   const pn=st==='break'||st==='full'||st==='ready'?`<span id="stt">${stText}</span>`:st==='running'?`<span id="stt">${esc(pname(m,Math.min(c.period,m.periods)))}</span>`:`${esc(pname(m,Math.min(c.period,m.periods)))} · <span id="stt">${stText}</span>`;
-  const evg=`<div class="evg">${EVBTN.map(b=>`<button class="${b.c||''}" data-act="ev" data-k="${b.k}"><i>${b.i}</i>${b.l}</button>`).join('')}</div>`;
+  const evg=`<div class="evg">${EVBTN.map(b=>b.k==='balance'?`<button data-act="balance"><i>${b.i}</i>${b.l}</button>`:`<button class="${b.c||''}" data-act="ev" data-k="${b.k}"><i>${b.i}</i>${b.l}</button>`).join('')}</div>`;
   return `<header class="top live"><div class="sb"><div class="tm">${crest(S.team,24)}<span>${esc(S.team.name)}</span></div><div class="score" id="score">${sc.us} – ${sc.them}</div><div class="tm r"><span>${esc(m.opp)}</span></div></div></header>
   <main class="lvm">
   ${ro?`<div class="note" style="margin-top:0;text-align:center">Watching live · view only${SYNC.state==='offline'?' · offline, may be behind':''}</div>`:''}
@@ -1521,8 +1522,9 @@ function summaryView(m){
 /* ---------- sheet ---------- */
 const sheetEl=()=>$('#sheet');
 function closeSheet(){V.sheet=null;renderSheet()}
-function pgrid(ids,act,extra){
-  return `<div class="pg">${byNum(ids).map(id=>{const p=P(id);return `<button class="pb" data-act="${act}" data-id="${id}"><b>${esc(p.num)}</b><span>${esc(sname(p))}</span></button>`}).join('')}${extra||''}</div>`;
+function pgrid(ids,act,extra,hurtM){
+  const hurt=hurtM?hurtSet(hurtM):new Set();
+  return `<div class="pg">${byNum(ids).map(id=>{const p=P(id);const inj=p.injured||hurt.has(id);return `<button class="pb${inj?' hurt':''}" data-act="${act}" data-id="${id}">${inj?'<s class="pbx">'+RX+'</s>':''}<b>${esc(p.num)}</b><span>${esc(sname(p))}</span></button>`}).join('')}${extra||''}</div>`;
 }
 const chips=(arr,act,sel)=>`<div class="chips">${arr.map(x=>`<button class="${sel===x?'on':''}" data-act="${act}" data-val="${esc(x)}">${esc(x)}</button>`).join('')}</div>`;
 function sheetWrap(title,inner,back){
@@ -1560,7 +1562,7 @@ function renderSheet(){
     case 'red':html=sheetWrap('Red card — who?',pgrid(byNum([...pitchSet(m)]),'pick'));break;
     case 'sub':
       if(s.step===0)html=sheetWrap(d.on?esc(label(d.on))+' comes on for?':'Coming off?',pgrid(byNum([...pitchSet(m)]).filter(id=>id!==d.on),'pick'));
-      else if(s.step===1)html=sheetWrap('Coming on for '+esc(label(d.off))+'?',benchIds(m).length?pgrid(benchIds(m),'pick'):'<div class="empty" style="padding:14px">No one left on the bench</div>',true);
+      else if(s.step===1)html=sheetWrap('Coming on for '+esc(label(d.off))+'?',benchIds(m).length?pgrid(benchIds(m),'pick','',m):'<div class="empty" style="padding:14px">No one left on the bench</div>',true);
       else html=sheetWrap('Reason?',chips(SUBWHY,'pick'),true);
       break;
     case 'note':
