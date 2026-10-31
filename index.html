@@ -329,6 +329,7 @@ header.top.live .sb .tm{font-size:14px;gap:6px}
 .ctlbar .pname{white-space:nowrap;font-size:10px;font-weight:700;color:var(--mute);text-transform:uppercase;letter-spacing:.04em}
 .ctlbar .cb{display:flex;gap:6px;flex:none}
 .ctlbar .cb .btn{min-height:42px;padding:0 12px;font-size:14px}
+.btn.pausebtn{background:#d32f2f;border:2px solid #d32f2f;color:#fff}
 main.lvm{padding-top:4px}
 .pw .pitch{height:clamp(280px,calc(100dvh - 450px),640px)}
 .tray{grid-template-columns:repeat(5,1fr);gap:5px}
@@ -357,7 +358,7 @@ main.lvm{padding-top:4px}
 .stt.on{background:#1e8f4e;color:#fff}
 .rx{color:#d32f2f;font-weight:900}
 .tk b s{text-decoration:none}
-.tk b s .rx{background:#fff;border-radius:50%;width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;font-size:12px;line-height:1;box-shadow:0 0 0 1px #d32f2f}
+.tk b s .rx{background:#fff;border-radius:50%;width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;font-size:12px;line-height:1;box-shadow:0 0 0 1px #d32f2f}
 [data-theme=dark] .lt .pos{color:#6fdc9b}[data-theme=dark] .lt .neg{color:#f08a80}
 
 /* team sheet */
@@ -406,7 +407,7 @@ main.lvm{padding-top:4px}
 .d2 .bench .tk{width:56px}
 .d2 .bench{min-height:0;max-height:none;padding:4px 6px;gap:2px 4px}
 .lv-a .bench{max-height:172px}.d2 .bench{max-height:156px}
-.row2{display:flex;gap:8px;margin:0 0 6px}.row2 .notebtn{flex:1;margin:0}
+.row2{display:flex;gap:6px;margin:0 0 6px}.row2 .notebtn{flex:1;margin:0;padding:0 4px;font-size:13px;white-space:nowrap;min-width:0}
 .pinpitch{position:relative;width:100%;aspect-ratio:68/52.5;max-height:56vh;background:#2e8b4a;border:3px solid #1f6b37;border-radius:14px;overflow:hidden;touch-action:manipulation;cursor:crosshair}
 .pinpitch .pl{position:absolute;inset:0;width:100%;height:100%}
 .pinpitch .z9{position:absolute;inset:0;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);pointer-events:none}
@@ -963,19 +964,21 @@ function matchBadges(m){
   return{goals,yel};
 }
 const gmMap=m=>{const o={};try{liveRows(m).forEach(r=>{o[r.id]=r.now})}catch(e){}return o};
+/* players who came off injured in this match (until they are put back on) */
+function hurtSet(m){const h=new Set();for(const e of sortedEvents(m)){if(e.t==='sub'){if(e.reason==='Injury')h.add(e.offId);h.delete(e.onId)}}return h}
 function liveTokens(m,drag){
-  const pos=posMap(m),b=matchBadges(m),gm=gmMap(m);
-  return [...pitchSet(m)].filter(id=>P(id)&&!gone(m,id)).map(id=>tokenHtml(id,{drag,where:'pitch',pos:pos[id],drop:drag,act:'tapPlayer',cap:m.captain===id,mins:gm[id],goals:b.goals[id],yel:b.yel[id]})).join('');
+  const pos=posMap(m),b=matchBadges(m),gm=gmMap(m),hurt=hurtSet(m);
+  return [...pitchSet(m)].filter(id=>P(id)&&!gone(m,id)).map(id=>tokenHtml(id,{drag,where:'pitch',pos:pos[id],drop:drag,act:'tapPlayer',inj:P(id).injured||hurt.has(id),cap:m.captain===id,mins:gm[id],goals:b.goals[id],yel:b.yel[id]})).join('');
 }
 function benchTokens(m,drag){
-  const b=matchBadges(m),gm=gmMap(m);
-  return benchIds(m).map(id=>tokenHtml(id,{drag,where:'bench',drop:drag,act:'tapBench',cap:m.captain===id,mins:gm[id],goals:b.goals[id],yel:b.yel[id]})).join('');
+  const b=matchBadges(m),gm=gmMap(m),hurt=hurtSet(m);
+  return benchIds(m).map(id=>tokenHtml(id,{drag,where:'bench',drop:drag,act:'tapBench',inj:P(id).injured||hurt.has(id),cap:m.captain===id,mins:gm[id],goals:b.goals[id],yel:b.yel[id]})).join('');
 }
 function pitchBlock(m){
   const bt=benchTokens(m,false);
   return `<div class="pitchwrap pw">${pitchEl(liveTokens(m,false),{})}</div>
   <div class="bench"><span class="bl">Bench</span>${bt||'<i>No one on the bench</i>'}</div>
-  <div class="row2"><button class="btn sec notebtn" data-act="ev" data-k="team">📊 Team stats</button><button class="btn sec notebtn" data-act="ev" data-k="note">📝 Note</button></div>
+  <div class="row2"><button class="btn sec notebtn" data-act="ev" data-k="team">📊 Team stats</button><button class="btn sec notebtn" data-act="ev" data-k="note">📝 Note</button><button class="btn sec notebtn" data-act="balance">⚖️ Balance time</button></div>
   <div class="hint">Tap a player to record what they did or move them. Tap a bench player to bring them on.</div>`;
 }
 /* drag layout: pitch with the actions down the right, bench underneath. Everything can be dragged or tapped. */
@@ -983,7 +986,7 @@ function d2Block(m){
   const acts=[['goal','⚽','Goal'],['shot','🎯','Shot'],['keypass','🔑','Pass'],['save','🧤','Save'],['tackle','🛡️','Tackle'],['mistake','❌','Mistake'],['yellow','🟨','Yellow'],['red','🟥','Red']].map(([k,i,l])=>`<button class="dz${k==='goal'?' g':''}" data-drop="${k}" data-act="ev" data-k="${k}"><i>${i}</i>${l}</button>`).join('');
   const bt=benchTokens(m,true);
   return `<div class="d2">${pitchEl(liveTokens(m,true),{drop:'pitch'})}<div class="acts">${acts}</div><div class="bench" data-drop="bench"><span class="bl">Bench</span>${bt||'<i>No one on the bench</i>'}</div></div>
-  <div class="row2"><button class="btn sec notebtn" data-act="ev" data-k="team">📊 Team stats</button><button class="btn sec notebtn" data-act="ev" data-k="note">📝 Note</button></div>
+  <div class="row2"><button class="btn sec notebtn" data-act="ev" data-k="team">📊 Team stats</button><button class="btn sec notebtn" data-act="ev" data-k="note">📝 Note</button><button class="btn sec notebtn" data-act="balance">⚖️ Balance time</button></div>
   <div class="hint">Drag a player onto an action, onto another player to swap or substitute, or to a new spot. Or just tap a player or an action.</div>`;
 }
 
@@ -1144,6 +1147,45 @@ function pinNext(m,e){
 function pinBar(m){
   if(V.tab!=='match'||!m||m.status!=='live'||!canEdit())return '';
   return `<div class="lbl">Pin shot, goal and assist locations</div><div class="modebar"><button class="${m.pins?'':'on'}" data-act="pinsSet" data-v="off">Off</button><button class="${m.pins?'on':''}" data-act="pinsSet" data-v="on">On</button></div>`;
+}
+
+/* ---------- balance time: who should go off and on so outfield players finish level ---------- */
+function balancePlan(m){
+  const end=matchEnd(m),cm=nowMin(m),R=Math.max(0,end-cm);
+  const on=pitchSet(m),pos=posMap(m),hurt=hurtSet(m);
+  const sentOff=new Set(m.events.filter(e=>e.t==='red').map(e=>e.playerId));
+  const isGK=id=>pos[id]==='GK'||(P(id)&&P(id).pos==='GK');
+  const ids=Object.keys(m.squad).filter(id=>P(id)&&!gone(m,id)&&['starter','sub'].includes(m.squad[id].role)&&!sentOff.has(id)&&!isGK(id)&&(on.has(id)||(!P(id).injured&&!hurt.has(id))));
+  const now={};ids.forEach(id=>{const sp=playSpan(m,id)||{on:null,off:null};now[id]=sp.on===null?0:Math.max(0,(sp.off===null?cm:sp.off)-sp.on)});
+  const slots=ids.filter(id=>on.has(id)).length,supply=R*slots;
+  // everyone finishes on the same total (T) where possible; nobody is asked to lose minutes or play more than the time left
+  const sumAt=t=>ids.reduce((a,id)=>a+Math.max(0,Math.min(R,t-now[id])),0);
+  let lo=0,hi=end+R;for(let i=0;i<40;i++){const mid=(lo+hi)/2;if(sumAt(mid)<supply)lo=mid;else hi=mid}
+  const T=hi;const raw={},need={};let tot=0;
+  ids.forEach(id=>{raw[id]=Math.max(0,Math.min(R,T-now[id]));need[id]=Math.floor(raw[id]);tot+=need[id]});
+  ids.slice().sort((x,y)=>(raw[y]-need[y])-(raw[x]-need[x])).forEach(id=>{if(tot<supply&&need[id]<R&&raw[id]-need[id]>0){need[id]++;tot++}});
+  for(let g=0;g<5&&tot<supply;g++)ids.slice().sort((x,y)=>need[x]-need[y]).forEach(id=>{if(tot<supply&&need[id]<R&&raw[id]>0){need[id]++;tot++}});
+  // lay the playing time out slot by slot (wrap-around), so nobody is on twice at once
+  const order=[...ids.filter(id=>on.has(id)),...ids.filter(id=>!on.has(id))].filter(id=>need[id]>0).sort((x,y)=>(on.has(y)-on.has(x))||need[y]-need[x]);
+  const tl=Array.from({length:slots},()=>[]);let at=0;
+  for(const id of order){let rem=need[id];while(rem>0&&at<slots*R){const sl=Math.floor(at/R),off=at%R,take=Math.min(rem,R-off);tl[sl].push({id,from:off,to:off+take});at+=take;rem-=take}}
+  const orig=new Array(slots).fill(null),free=ids.filter(id=>on.has(id));
+  tl.forEach((seg,i)=>{const f=seg[0]&&seg[0].id;if(f&&free.includes(f)&&!orig.includes(f))orig[i]=f});
+  tl.forEach((seg,i)=>{if(!orig[i]){const f=free.find(id=>!orig.includes(id));orig[i]=f||null}});
+  const subs=[];
+  tl.forEach((seg,i)=>{let cur=orig[i];seg.forEach(sg=>{if(sg.id!==cur){if(cur)subs.push({min:cm+sg.from,off:cur,on:sg.id});cur=sg.id}})});
+  subs.sort((x,y)=>x.min-y.min);
+  const fin=id=>now[id]+need[id];
+  const rows=ids.map(id=>({id,now:now[id],more:need[id],fin:fin(id),on:on.has(id)})).sort((a,b)=>(b.on-a.on)||P(a.id).num-P(b.id).num);
+  return{end,cm,R,T:Math.round(hi),rows,subs,n:ids.length,slots};
+}
+function balanceBody(m){
+  const b=balancePlan(m),tag=id=>`<b>#${esc(P(id).num)}</b> ${esc(sname(P(id)))}`;
+  if(b.n<2||!b.slots)return sheetWrap('Balance time','<div class="note">Not enough outfield players to balance yet.</div><button class="btn block" data-act="closeSheet" style="margin-top:10px">Done</button>');
+  if(!b.R)return sheetWrap('Balance time','<div class="note">No time left to play.</div><button class="btn block" data-act="closeSheet" style="margin-top:10px">Done</button>');
+  const subs=b.subs.length?`<div class="lbl" style="margin-top:10px">Suggested changes</div>`+b.subs.map(s=>`<div class="prow"><div class="nm"><b>${s.min===b.cm?'Now':s.min+"'"}</b> &nbsp; <span style="color:#d32f2f">⬇ off</span> ${tag(s.off)}<small><span style="color:#1e8f4e">⬆ on</span> ${tag(s.on)}</small></div></div>`).join(''):'<div class="note">Nobody needs to change — minutes will finish level.</div>';
+  const rows=`<div class="tblwrap"><table class="lt"><thead><tr><th class="nm">Player</th><th>Now</th><th>Still to play</th><th>Final</th></tr></thead><tbody>${b.rows.map(r=>`<tr class="${r.on?'':'dim'}"><td class="nm">${tag(r.id)} <small>${r.on?'on':'bench'}</small></td><td>${r.now}'</td><td>${r.more?'+'+r.more+"'":'–'}</td><td><b>${r.fin}'</b></td></tr>`).join('')}</tbody></table></div>`;
+  return sheetWrap('Balance time',`<div class="note" style="margin-top:0">${b.R} min left of ${b.end}. Outfield players (not the keeper, not injured or sent off) can each finish on about <b>${b.T} min</b>. Anyone already above that is rested.</div>${subs}<div class="lbl" style="margin-top:10px">Minutes</div>${rows}<div class="note">A guide only, based on the clock now. Goals, cards or injuries change it, so reopen it any time.</div><button class="btn block" data-act="closeSheet" style="margin-top:10px">Done</button>`);
 }
 
 /* ---------- team counters (corners, fouls, offsides, their shots) ---------- */
@@ -1395,8 +1437,8 @@ function liveView(m,ro){
   const agn=pit?`<button class="btn sec" data-act="ev" data-k="oppgoal">🥅 Against</button>`:'';
   if(!ro){
   if(st==='ready')ctl=`<button class="btn" data-act="ko">Kick off</button>`;
-  else if(st==='running')ctl=`${agn}<button class="btn sec" data-act="pause">⏸ Pause</button><button class="btn" data-act="endPeriod">End ${esc(pname(m,c.period).replace('half','half'))}</button>`;
-  else if(st==='paused')ctl=`${agn}<button class="btn" data-act="resume">▶ Resume</button><button class="btn sec" data-act="endPeriod">End ${esc(pname(m,c.period))}</button>`;
+  else if(st==='running')ctl=`<button class="btn pausebtn" data-act="pause">⏸ Pause</button><button class="btn" data-act="endPeriod">End ${esc(pname(m,c.period).replace('half','half'))}</button>${agn}`;
+  else if(st==='paused')ctl=`<button class="btn" data-act="resume">▶ Resume</button><button class="btn sec" data-act="endPeriod">End ${esc(pname(m,c.period))}</button>${agn}`;
   else if(st==='break')ctl=`<button class="btn" data-act="nextPeriod">Start ${esc(pname(m,c.period))}</button>`;
   else if(st==='full')ctl=`<button class="btn" data-act="finish">Finish match</button>`;
   }
@@ -1510,6 +1552,7 @@ function renderSheet(){
       html=s.step===0?sheetWrap('Mistake — who?',pgrid(byNum([...pitchSet(m)]),'pick')):sheetWrap(esc(label(d.pid))+' — what was it?',chips(MISTAKES,'pick'),true);break;
     case 'where':html=whereBody(m,d);break;
     case 'team':html=teamBody(m);break;
+    case 'bal':html=balanceBody(m);break;
     case 'captain':html=sheetWrap('Who is the captain?',pgrid(byNum(Object.keys(m.squad).filter(id=>m.squad[id].role==='starter'||m.squad[id].role==='sub')).sort((a,b)=>(m.squad[a].role==='starter'?0:1)-(m.squad[b].role==='starter'?0:1)),'capSet',`<button class="pb alt" data-act="capSkip"><b>—</b><span>${d.ko?'Skip':'None'}</span></button>`));break;
     case 'yellow':html=sheetWrap('Yellow card — who?',pgrid(byNum([...pitchSet(m)]),'pick'));break;
     case 'red':html=sheetWrap('Red card — who?',pgrid(byNum([...pitchSet(m)]),'pick'));break;
@@ -2602,6 +2645,7 @@ function actExtra(a,ds,el){
     case 'pinEdit':V.sheet={kind:'where',d:{id:ds.id,step:'main',fromLog:true}};renderSheet();return true;
     case 'pinsSet':{const m=M();m.pins=ds.v==='on';DB.prefs.pins=m.pins;save();render();return true}
     case 'pinsDefault':DB.prefs.pins=ds.v==='on';save();render();return true;
+    case 'balance':{V.sheet={kind:'bal',d:{}};renderSheet();return}
     case 'teamTap':{const m=M();const dd=+ds.d;
       if(dd>0){const st=curStamp(m);m.events.push({id:uid(),t:'tstat',how:ds.side,detail:ds.k,period:st.period,minute:st.minute,ts:Date.now()});buzz()}
       else{const c=m.events.map((e,i)=>[e,i]).filter(([e])=>e.t==='tstat'&&e.detail===ds.k&&e.how===ds.side).sort((a,b)=>(a[0].ts||0)-(b[0].ts||0)).pop();if(c)m.events.splice(c[1],1)}
@@ -2730,7 +2774,7 @@ document.addEventListener('visibilitychange',()=>{if(!document.hidden){const m=M
 render();
 if(CLOUD&&DB.user)setTimeout(()=>syncNow(),300);
 if('serviceWorker' in navigator&&/^https?:$/.test(location.protocol)){navigator.serviceWorker.register('sw.js').catch(()=>{})}
-window.__touchline={csvBuild,liveRows,describe,posMap,startPos,prefillLineup,placePlayers,formSlots,movePos,lineupDrop,poolFor,fmtN,nearestPos,minsPlayed,matchEnd,stats,matchSummary,applyRows,S:()=>S,DB:()=>DB,V,act,render,parseRoster,syncNow,rowsFor,pendingCount};
+window.__touchline={balancePlan,csvBuild,liveRows,describe,posMap,startPos,prefillLineup,placePlayers,formSlots,movePos,lineupDrop,poolFor,fmtN,nearestPos,minsPlayed,matchEnd,stats,matchSummary,applyRows,S:()=>S,DB:()=>DB,V,act,render,parseRoster,syncNow,rowsFor,pendingCount};
 })();
 </script>
 </body>
