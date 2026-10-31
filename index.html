@@ -523,7 +523,7 @@ let REV=0;
 function save(){REV++;try{localStorage.setItem(KEY,JSON.stringify(DB))}catch(e){}if(CLOUD&&typeof schedSync==='function')schedSync()}
 function setCur(id){DB.cur=id;S=DB.teams[id]||EMPTY();V.tab='match';V.matchId=null;V.sess=null;V.sheet=null;try{localStorage.setItem(KEY,JSON.stringify(DB))}catch(e){}}
 const V={lsel:null,prefill:'',luList:false,sortDir:0,tab:'match',step:'details',matchId:null,sess:null,sheet:null,imp:null,attMode:'sessions',sort:'num',
-  auth:{mode:'in',email:'',password:'',name:'',invite:'',err:'',busy:false},
+  auth:{mode:'in',email:'',password:'',name:'',invite:'',err:'',busy:false,sent:false},
   draft:{name:'',age:'',ground:'',primary:'#0b6b3a',secondary:'#ffffff',onPitch:11,periods:2,periodMins:45},err:''};
 const T=()=>S.team||V.draft;
 const canEdit=()=>S.role==='coach';
@@ -2001,6 +2001,46 @@ async function doAuth(){
   }catch(e){a.err=e.message}
   a.busy=false;render();
 }
+/* email link sign-up / sign-in (no password) */
+const PEND='touchline-pending';
+async function doLink(){
+  const a=V.auth;a.err='';const email=a.email.trim();
+  if(!/^\S+@\S+\.\S+$/.test(email)){a.err='Enter a valid email address.';render();return}
+  const name=(a.name||'').trim()||email.split('@')[0];
+  a.busy=true;render();
+  try{
+    try{localStorage.setItem(PEND,JSON.stringify({name:a.mode==='up'?name:'',invite:a.invite.trim(),t:Date.now()}))}catch(e){}
+    const cb=location.origin+location.pathname+'?linked=1';
+    const r=await fetch(AUTH_URL+'/sign-in/magic-link',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,name,callbackURL:cb,newUserCallbackURL:cb,errorCallbackURL:cb})});
+    const j=await r.json().catch(()=>({}));
+    if(r.status===404)throw new Error('Signing in by email link is not switched on yet. Please ask the app admin.');
+    if(!r.ok)throw new Error(j.message||'Could not send the email. Check the address and try again.');
+    a.sent=true;
+  }catch(e){a.err=e.message}
+  a.busy=false;render();
+}
+async function finishLink(){
+  const q=new URLSearchParams(location.search);
+  if(!CLOUD||!(q.has('linked')||q.has('error')))return;
+  history.replaceState(null,'',location.pathname);
+  if(DB.user)return;
+  const a=V.auth;
+  if(q.has('error')){a.err='That link did not work or has expired. Enter your email to get a new one.';render();return}
+  let pend={};try{pend=JSON.parse(localStorage.getItem(PEND)||'{}')}catch(e){}
+  a.busy=true;render();
+  try{
+    let jwt;try{jwt=await getJwt(true)}catch(e){throw new Error(BLOCKED)}
+    const p=jwtPayload(jwt);
+    const prof=await rest('POST','/rpc/ensure_profile',{p_name:pend.name||null});
+    DB.user={id:p.id||p.sub,email:prof.email||p.email||'',name:prof.display_name||pend.name||'',isSuper:!!prof.is_superuser};
+    let joined=null;
+    if(pend.invite){try{joined=await rest('POST','/rpc/redeem_invite',{p_code:pend.invite})}catch(e){a.err='Signed in, but the invite code did not work: '+e.message}}
+    try{localStorage.removeItem(PEND)}catch(e){}
+    a.invite='';a.sent=false;save();SYNC.state='idle';await syncNow(true);
+    if(joined&&DB.teams[joined.team_id])setCur(joined.team_id);
+  }catch(e){a.err=e.message}
+  a.busy=false;render();
+}
 async function doReauth(){
   const d=V.sheet.d;d.err='';
   try{await authCall('/sign-in/email',{email:DB.user.email,password:d.password});await getJwt(true).catch(()=>{throw new Error(BLOCKED)});V.sheet=null;SYNC.state='idle';await syncNow(true)}
@@ -2194,16 +2234,22 @@ if(CLOUD){
 
 /* ---------- auth & team screens ---------- */
 function authView(){
-  const a=V.auth;
-  return `<header class="top"><div class="hrow">${crest({name:'Touchline'},44)}<div><h1>Touchline</h1><div class="sub">Sign in to your team</div></div></div></header>
+  const a=V.auth;const up=a.mode==='up';
+  const head=`<header class="top"><div class="hrow">${crest({name:'Touchline'},44)}<div><h1>Touchline</h1><div class="sub">${up?'Create your account':'Sign in to your team'}</div></div></div></header>`;
+  if(a.sent)return head+`<main><div class="card" style="text-align:center"><div style="font-size:42px">📧</div><h2 style="margin:6px 0">Check your email</h2><p style="margin:0 0 6px">We sent a link to <b>${esc(a.email.trim())}</b>.</p><p class="note" style="margin-top:0">Tap the link to confirm your email and you are in. It works once and expires soon. Open it on this device. Look in junk if it does not arrive.</p></div>
+  ${a.err?`<div class="err">${esc(a.err)}</div>`:''}
+  <button class="btn sec block" data-act="authLink" ${a.busy?'disabled':''}>${a.busy?'Sending…':'Send it again'}</button>
+  <div style="text-align:center;margin-top:12px"><button class="linkbtn" data-act="authLinkBack">Use a different email</button></div></main>`;
+  return head+`
   <main>
-  <div class="seg"><button class="${a.mode==='in'?'on':''}" data-act="authMode" data-v="in">Sign in</button><button class="${a.mode==='up'?'on':''}" data-act="authMode" data-v="up">Create account</button></div>
-  ${a.mode==='up'?`<label>Your name<input data-bind="auth.name" value="${esc(a.name)}" autocomplete="name" placeholder="e.g. Robert Dalziel"></label>`:''}
+  <div class="seg"><button class="${a.mode==='in'?'on':''}" data-act="authMode" data-v="in">Sign in</button><button class="${up?'on':''}" data-act="authMode" data-v="up">Create account</button></div>
+  ${up?`<label>Your name<input data-bind="auth.name" value="${esc(a.name)}" autocomplete="name" placeholder="e.g. Robert Dalziel"></label>`:''}
   <label>Email<input type="email" data-bind="auth.email" value="${esc(a.email)}" autocomplete="email" autocapitalize="off" inputmode="email"></label>
-  <label>Password${a.mode==='up'?' (8 or more characters)':''}<input type="password" data-bind="auth.password" value="${esc(a.password)}" autocomplete="${a.mode==='up'?'new-password':'current-password'}"></label>
+  ${up?'':`<label>Password<input type="password" data-bind="auth.password" value="${esc(a.password)}" autocomplete="current-password"></label>`}
   <label>Invite code (only if you were given one)<input data-bind="auth.invite" value="${esc(a.invite)}" autocapitalize="characters" autocomplete="off" placeholder="e.g. K7M2QX9P"></label>
   ${a.err?`<div class="err">${esc(a.err)}</div>`:''}
-  <button class="btn block lg" data-act="authGo" ${a.busy?'disabled':''}>${a.busy?'One moment…':a.mode==='up'?'Create account':'Sign in'}</button>
+  ${up?`<button class="btn block lg" data-act="authLink" ${a.busy?'disabled':''}>${a.busy?'Sending…':'Email me a link'}</button><p class="note">No password needed. We email you a link to confirm your email address, then you are in.</p>`
+  :`<button class="btn block lg" data-act="authGo" ${a.busy?'disabled':''}>${a.busy?'One moment…':'Sign in'}</button><div style="text-align:center;margin-top:10px"><button class="linkbtn" data-act="authLink">Email me a sign-in link instead</button></div>`}
   <p class="note">Coaches and reviewers join a team with an invite code from a coach or the app admin. Once you are in, the app keeps working with no signal and syncs when you are back online.</p>
   <p class="note"><a href="?local=1">Try it on this device with no account</a> (data is not shared or backed up).</p>
   </main>`;
@@ -2605,6 +2651,8 @@ function actExtra(a,ds,el){
     case 'toastAct':{const f=TOAST_FN;TOAST_FN=null;const t=$('#toast');if(t)t.style.display='none';if(f)f();return true}
     case 'authMode':V.auth.mode=ds.v;V.auth.err='';render();return true;
     case 'authGo':doAuth();return true;
+    case 'authLink':doLink();return true;
+    case 'authLinkBack':V.auth.sent=false;V.auth.err='';render();return true;
     case 'syncNow':manualRender=true;toast('Syncing…');syncNow(true).finally(()=>{manualRender=false;if(SYNC.state==='ok')toast('Up to date');render()});return true;
     case 'reauth':V.sheet={kind:'reauth',d:{password:'',err:''}};renderSheet();return true;
     case 'reauthGo':doReauth();return true;
@@ -2776,6 +2824,7 @@ document.addEventListener('visibilitychange',()=>{if(!document.hidden){const m=M
 
 (()=>{const q=new URLSearchParams(location.search).get('invite');if(q){V.auth.invite=q.toUpperCase();V.auth.mode='up';if(CLOUD&&DB.user)V.newTeam=true}})();
 render();
+finishLink();
 if(CLOUD&&DB.user)setTimeout(()=>syncNow(),300);
 if('serviceWorker' in navigator&&/^https?:$/.test(location.protocol)){navigator.serviceWorker.register('sw.js').catch(()=>{})}
 window.__touchline={balancePlan,csvBuild,liveRows,describe,posMap,startPos,prefillLineup,placePlayers,formSlots,movePos,lineupDrop,poolFor,fmtN,nearestPos,minsPlayed,matchEnd,stats,matchSummary,applyRows,S:()=>S,DB:()=>DB,V,act,render,parseRoster,syncNow,rowsFor,pendingCount};
