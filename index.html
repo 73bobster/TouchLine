@@ -425,6 +425,9 @@ main.lvm{padding-top:4px}
 
 /* season card, shot map */
 .season{margin:8px 0 12px}
+.formstrip{display:flex;gap:3px;margin:2px 0 10px;overflow:hidden;justify-content:flex-start}
+.formstrip i{flex:none;width:20px;height:20px;border-radius:5px;display:flex;align-items:center;justify-content:center;color:#fff;font-style:normal;font-weight:800;font-size:11px}
+.formstrip i.w{background:#1e8f4e}.formstrip i.d{background:#8a8f94}.formstrip i.l{background:#c0392b}.formstrip i.h{display:none}
 .sbar{display:flex;height:26px;border-radius:13px;overflow:hidden;background:var(--line);margin-bottom:4px}
 .sbar span{display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:13px}
 .sbar .w{background:#1e8f4e}.sbar .d{background:#8a8f94}.sbar .l{background:#c0392b}
@@ -1209,6 +1212,20 @@ function compBar(){
 }
 const isGF=e=>e.t==='goal'&&e.how!=='Own goal';
 const isGA=e=>e.t==='oppgoal'||(e.t==='goal'&&e.how==='Own goal');
+/* form: oldest on the left, newest on the right, as many as fit on one line */
+function formStrip(ms){
+  if(!ms.length)return '';
+  const sq=ms.slice().reverse().map(m=>{const x=score(m);const r=x.us>x.them?'w':x.us===x.them?'d':'l';return `<i class="${r}" title="${esc(m.opp||'')} ${x.us}-${x.them}">${r.toUpperCase()}</i>`}).join('');
+  return `<div class="formstrip" aria-label="Recent results, oldest first">${sq}</div>`;
+}
+function fitForm(){
+  document.querySelectorAll('.formstrip').forEach(el=>{
+    const k=[...el.children];k.forEach(c=>c.classList.remove('h'));
+    const w=el.clientWidth,n=Math.max(1,Math.floor((w+3)/23));
+    for(let i=0;i<k.length-n;i++)k[i].classList.add('h');
+  });
+}
+window.addEventListener('resize',fitForm);
 function seasonCard(ms){
   if(!ms.length)return '';
   const sc=ms.map(score);
@@ -1480,7 +1497,7 @@ function historyView(){
   if(V.matchId){const m=VM();if(m)return summaryView(m)}
   const ms=S.matches.filter(m=>m.status==='done'&&compOk(m)).sort((a,b)=>(b.date+b.time).localeCompare(a.date+a.time));
   const w=ms.filter(m=>score(m).us>score(m).them).length,d=ms.filter(m=>score(m).us===score(m).them).length,l=ms.length-w-d;
-  return header('Results',ms.length?`P${ms.length} · W${w} D${d} L${l}`:'')+`<main>${compBar()}${seasonCard(ms)}${ms.length?`<div class="cols">${ms.map(resultCard).join('')}</div>`:'<div class="empty"><b>No finished matches yet</b>Record your first match and it will appear here.</div>'}</main>`;
+  return header('Results',ms.length?`P${ms.length} · W${w} D${d} L${l}`:'')+`<main>${formStrip(ms)}${compBar()}${seasonCard(ms)}${ms.length?`<div class="cols">${ms.map(resultCard).join('')}</div>`:'<div class="empty"><b>No finished matches yet</b>Record your first match and it will appear here.</div>'}</main>`;
 }
 
 function summaryView(m){
@@ -2812,6 +2829,7 @@ function render(){
   app.innerHTML=body+tabbar();
   document.body.classList.remove('mb');
   renderSheet();
+  fitForm();
 }
 
 setInterval(()=>{
