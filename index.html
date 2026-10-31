@@ -329,7 +329,7 @@ header.top.live .sb .tm{font-size:14px;gap:6px}
 .ctlbar .pname{white-space:nowrap;font-size:10px;font-weight:700;color:var(--mute);text-transform:uppercase;letter-spacing:.04em}
 .ctlbar .cb{display:flex;gap:6px;flex:none}
 .ctlbar .cb .btn{min-height:42px;padding:0 12px;font-size:14px}
-.btn.pausebtn{background:#d32f2f;border:2px solid #d32f2f;color:#fff}
+.btn.againstbtn{background:#d32f2f;border:2px solid #d32f2f;color:#fff}
 main.lvm{padding-top:4px}
 .pw .pitch{height:clamp(280px,calc(100dvh - 450px),640px)}
 .tray{grid-template-columns:repeat(5,1fr);gap:5px}
@@ -1150,6 +1150,7 @@ function pinBar(m){
 }
 
 /* ---------- balance time: who should go off and on so outfield players finish level ---------- */
+const LINE_OF=l=>/^(RB|RCB|CB|LCB|LB|RWB|LWB|DEF)$/.test(l||'')?'DEF':/^(RDM|CDM|LDM|RM|RCM|CM|LCM|LM|RAM|CAM|LAM|MID)$/.test(l||'')?'MID':/^(RW|LW|RS|CF|LS|FWD)$/.test(l||'')?'FWD':'';
 function balancePlan(m){
   const end=matchEnd(m),cm=nowMin(m),R=Math.max(0,end-cm);
   const on=pitchSet(m),pos=posMap(m),hurt=hurtSet(m);
@@ -1157,35 +1158,36 @@ function balancePlan(m){
   const isGK=id=>pos[id]==='GK'||(P(id)&&P(id).pos==='GK');
   const ids=Object.keys(m.squad).filter(id=>P(id)&&!gone(m,id)&&['starter','sub'].includes(m.squad[id].role)&&!sentOff.has(id)&&!isGK(id)&&(on.has(id)||(!P(id).injured&&!hurt.has(id))));
   const now={};ids.forEach(id=>{const sp=playSpan(m,id)||{on:null,off:null};now[id]=sp.on===null?0:Math.max(0,(sp.off===null?cm:sp.off)-sp.on)});
-  const slots=ids.filter(id=>on.has(id)).length,supply=R*slots;
-  // everyone finishes on the same total (T) where possible; nobody is asked to lose minutes or play more than the time left
-  const sumAt=t=>ids.reduce((a,id)=>a+Math.max(0,Math.min(R,t-now[id])),0);
-  let lo=0,hi=end+R;for(let i=0;i<40;i++){const mid=(lo+hi)/2;if(sumAt(mid)<supply)lo=mid;else hi=mid}
-  const T=hi;const raw={},need={};let tot=0;
-  ids.forEach(id=>{raw[id]=Math.max(0,Math.min(R,T-now[id]));need[id]=Math.floor(raw[id]);tot+=need[id]});
-  ids.slice().sort((x,y)=>(raw[y]-need[y])-(raw[x]-need[x])).forEach(id=>{if(tot<supply&&need[id]<R&&raw[id]-need[id]>0){need[id]++;tot++}});
-  for(let g=0;g<5&&tot<supply;g++)ids.slice().sort((x,y)=>need[x]-need[y]).forEach(id=>{if(tot<supply&&need[id]<R&&raw[id]>0){need[id]++;tot++}});
-  // lay the playing time out slot by slot (wrap-around), so nobody is on twice at once
-  const order=[...ids.filter(id=>on.has(id)),...ids.filter(id=>!on.has(id))].filter(id=>need[id]>0).sort((x,y)=>(on.has(y)-on.has(x))||need[y]-need[x]);
-  const tl=Array.from({length:slots},()=>[]);let at=0;
-  for(const id of order){let rem=need[id];while(rem>0&&at<slots*R){const sl=Math.floor(at/R),off=at%R,take=Math.min(rem,R-off);tl[sl].push({id,from:off,to:off+take});at+=take;rem-=take}}
-  const orig=new Array(slots).fill(null),free=ids.filter(id=>on.has(id));
-  tl.forEach((seg,i)=>{const f=seg[0]&&seg[0].id;if(f&&free.includes(f)&&!orig.includes(f))orig[i]=f});
-  tl.forEach((seg,i)=>{if(!orig[i]){const f=free.find(id=>!orig.includes(id));orig[i]=f||null}});
-  const subs=[];
-  tl.forEach((seg,i)=>{let cur=orig[i];seg.forEach(sg=>{if(sg.id!==cur){if(cur)subs.push({min:cm+sg.from,off:cur,on:sg.id});cur=sg.id}})});
+  const line=id=>LINE_OF(on.has(id)?pos[id]:'')||LINE_OF(P(id).pos)||LINE_OF(pos[id]);
+  const pitch=ids.filter(id=>on.has(id)),bench=ids.filter(id=>!on.has(id));
+  // one change per fit bench player at most; most-rested bench player replaces the player with most minutes, same line where possible
+  const taken=new Set(),subs=[];
+  bench.slice().sort((x,y)=>now[x]-now[y]).forEach(j=>{
+    const free=pitch.filter(i=>!taken.has(i)&&now[i]>now[j]+4);
+    const same=free.filter(i=>!line(j)||line(i)===line(j));
+    const pick=(same.length?same:free).sort((x,y)=>now[y]-now[x])[0];
+    if(!pick)return;
+    taken.add(pick);
+    // change time so both finish on about the same minutes
+    let t=Math.round((end+cm+now[j]-now[pick])/2);t=Math.max(cm,Math.min(end-1,t));
+    subs.push({min:t,off:pick,on:j,offPos:pos[pick]||'',line:line(pick),lineOn:line(j),mismatch:!!(line(j)&&line(pick)&&line(j)!==line(pick))});
+  });
   subs.sort((x,y)=>x.min-y.min);
-  const fin=id=>now[id]+need[id];
-  const rows=ids.map(id=>({id,now:now[id],more:need[id],fin:fin(id),on:on.has(id)})).sort((a,b)=>(b.on-a.on)||P(a.id).num-P(b.id).num);
-  return{end,cm,R,T:Math.round(hi),rows,subs,n:ids.length,slots};
+  const fin={};ids.forEach(id=>fin[id]=now[id]+R);
+  subs.forEach(s=>{fin[s.off]=now[s.off]+(s.min-cm);fin[s.on]=now[s.on]+(end-s.min)});
+  const rows=ids.map(id=>({id,now:now[id],more:fin[id]-now[id],fin:fin[id],on:on.has(id),line:line(id)})).sort((a,b)=>(b.on-a.on)||P(a.id).num-P(b.id).num);
+  const f=rows.map(r=>r.fin);
+  return{end,cm,R,rows,subs,n:ids.length,slots:pitch.length,spare:bench.length-subs.length,benchN:bench.length,lo:f.length?Math.min(...f):0,hi:f.length?Math.max(...f):0};
 }
 function balanceBody(m){
   const b=balancePlan(m),tag=id=>`<b>#${esc(P(id).num)}</b> ${esc(sname(P(id)))}`;
-  if(b.n<2||!b.slots)return sheetWrap('Balance time','<div class="note">Not enough outfield players to balance yet.</div><button class="btn block" data-act="closeSheet" style="margin-top:10px">Done</button>');
-  if(!b.R)return sheetWrap('Balance time','<div class="note">No time left to play.</div><button class="btn block" data-act="closeSheet" style="margin-top:10px">Done</button>');
-  const subs=b.subs.length?`<div class="lbl" style="margin-top:10px">Suggested changes</div>`+b.subs.map(s=>`<div class="prow"><div class="nm"><b>${s.min===b.cm?'Now':s.min+"'"}</b> &nbsp; <span style="color:#d32f2f">⬇ off</span> ${tag(s.off)}<small><span style="color:#1e8f4e">⬆ on</span> ${tag(s.on)}</small></div></div>`).join(''):'<div class="note">Nobody needs to change — minutes will finish level.</div>';
-  const rows=`<div class="tblwrap"><table class="lt"><thead><tr><th class="nm">Player</th><th>Now</th><th>Still to play</th><th>Final</th></tr></thead><tbody>${b.rows.map(r=>`<tr class="${r.on?'':'dim'}"><td class="nm">${tag(r.id)} <small>${r.on?'on':'bench'}</small></td><td>${r.now}'</td><td>${r.more?'+'+r.more+"'":'–'}</td><td><b>${r.fin}'</b></td></tr>`).join('')}</tbody></table></div>`;
-  return sheetWrap('Balance time',`<div class="note" style="margin-top:0">${b.R} min left of ${b.end}. Outfield players (not the keeper, not injured or sent off) can each finish on about <b>${b.T} min</b>. Anyone already above that is rested.</div>${subs}<div class="lbl" style="margin-top:10px">Minutes</div>${rows}<div class="note">A guide only, based on the clock now. Goals, cards or injuries change it, so reopen it any time.</div><button class="btn block" data-act="closeSheet" style="margin-top:10px">Done</button>`);
+  const done=h=>sheetWrap('Balance time',h+'<button class="btn block" data-act="closeSheet" style="margin-top:10px">Done</button>');
+  if(!b.slots)return done('<div class="note">Not enough outfield players to balance yet.</div>');
+  if(!b.R)return done('<div class="note">No time left to play.</div>');
+  if(!b.benchN)return done('<div class="note">No fit players on the bench, so there is nothing to balance.</div>');
+  const subs=b.subs.length?`<div class="lbl" style="margin-top:10px">Suggested changes (${b.subs.length})</div>`+b.subs.map(s=>`<div class="prow"><div class="nm"><b>${s.min===b.cm?'Now':s.min+"'"}</b> &nbsp; <span style="color:#d32f2f">⬇ off</span> ${tag(s.off)}${s.offPos?` <small>${esc(s.offPos)}</small>`:''}<small><span style="color:#1e8f4e">⬆ on</span> ${tag(s.on)}${s.mismatch?` · ${s.lineOn||'?'} for ${s.line||'?'}`:s.line?` · same line (${s.line})`:''}</small></div></div>`).join(''):'<div class="note">No change would help: everyone is already close on minutes.</div>';
+  const rows=`<div class="tblwrap"><table class="lt"><thead><tr><th class="nm">Player</th><th>Now</th><th>Still to play</th><th>Final</th></tr></thead><tbody>${b.rows.map(r=>`<tr class="${r.on?'':'dim'}"><td class="nm">${tag(r.id)} <small>${r.line||''} ${r.on?'on':'bench'}</small></td><td>${r.now}'</td><td>${r.more?'+'+r.more+"'":'–'}</td><td><b>${r.fin}'</b></td></tr>`).join('')}</tbody></table></div>`;
+  return done(`<div class="note" style="margin-top:0">${b.R} min left of ${b.end}. At most one change per fit bench player (${b.benchN} here), same line where possible. Outfield players finish on ${b.lo}–${b.hi} min. Keeper, injured and sent-off players are left out.</div>${subs}<div class="lbl" style="margin-top:10px">Minutes</div>${rows}<div class="note">A guide only, based on the clock now. Goals, cards or injuries change it, so reopen it any time.</div>`);
 }
 
 /* ---------- team counters (corners, fouls, offsides, their shots) ---------- */
@@ -1434,10 +1436,10 @@ function liveView(m,ro){
   const rm=recMode(m);const pit=!ro&&rm!=='buttons';
   const recent=sortedEvents(m).filter(e=>e.t!=='period').slice(-4).reverse();
   let ctl='';
-  const agn=pit?`<button class="btn sec" data-act="ev" data-k="oppgoal">🥅 Against</button>`:'';
+  const agn=pit?`<button class="btn againstbtn" data-act="ev" data-k="oppgoal">🥅 Against</button>`:'';
   if(!ro){
   if(st==='ready')ctl=`<button class="btn" data-act="ko">Kick off</button>`;
-  else if(st==='running')ctl=`<button class="btn pausebtn" data-act="pause">⏸ Pause</button><button class="btn" data-act="endPeriod">End ${esc(pname(m,c.period).replace('half','half'))}</button>${agn}`;
+  else if(st==='running')ctl=`<button class="btn sec" data-act="pause">⏸ Pause</button><button class="btn" data-act="endPeriod">End ${esc(pname(m,c.period).replace('half','half'))}</button>${agn}`;
   else if(st==='paused')ctl=`<button class="btn" data-act="resume">▶ Resume</button><button class="btn sec" data-act="endPeriod">End ${esc(pname(m,c.period))}</button>${agn}`;
   else if(st==='break')ctl=`<button class="btn" data-act="nextPeriod">Start ${esc(pname(m,c.period))}</button>`;
   else if(st==='full')ctl=`<button class="btn" data-act="finish">Finish match</button>`;
