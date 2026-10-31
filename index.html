@@ -330,12 +330,14 @@ header.top.live .sb .tm{font-size:14px;gap:6px}
 .ctlbar .cb{display:flex;gap:6px;flex:none}
 .ctlbar .cb .btn{min-height:42px;padding:0 12px;font-size:14px}
 main.lvm{padding-top:4px}
-.pw .pitch{height:clamp(300px,calc(100dvh - 380px),640px)}
+.pw .pitch{height:clamp(280px,calc(100dvh - 450px),640px)}
 .tray{grid-template-columns:repeat(5,1fr);gap:5px}
 .tray .dz{min-height:46px;font-size:10px}.tray .dz i{font-size:17px}
 .tray.t2{grid-template-columns:1fr 1fr}
-.lv-a .bench{min-height:66px;margin:6px 0}
-.d2{--d2h:clamp(300px,calc(100dvh - 300px),700px);display:grid;grid-template-columns:minmax(0,1fr) 76px;gap:6px;margin:4px 0 6px}
+.lv-a .bench,.d2 .bench{flex-wrap:wrap;overflow-x:hidden;overflow-y:auto;align-content:flex-start;align-items:flex-start;gap:4px 6px;min-height:66px;max-height:148px;margin:6px 0}
+.lv-a .bench .bl{align-self:center}
+.d2 .bench{max-height:128px}
+.d2{--d2h:clamp(280px,calc(100dvh - 365px),700px);display:grid;grid-template-columns:minmax(0,1fr) 76px;gap:6px;margin:4px 0 6px}
 .d2 .pitch{height:min(var(--d2h),calc((100vw - 110px)*1.75))}
 .d2 .acts{height:auto;align-self:stretch}
 .d2 .bench{grid-column:1/-1;margin:0;min-height:62px}
