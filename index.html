@@ -426,6 +426,21 @@ main.lvm{padding-top:4px}
 .sd{position:absolute;width:14px;height:14px;border-radius:50%;transform:translate(-50%,-50%);border:2px solid #fff;box-sizing:border-box;display:inline-block}
 .sd.goal{background:#ffd400;border-color:#111;width:18px;height:18px}.sd.on{background:#2b7cff}.sd.off{background:transparent}.sd.blk{background:#888}.sd.post{background:#ff8a00}
 .leg{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:11px;margin-top:6px;align-items:center}.leg span{display:flex;align-items:center;gap:4px}.leg .sd{position:static;transform:none;width:12px;height:12px;box-shadow:0 0 0 1px #888}
+
+/* whiteboard */
+#wb{position:fixed;inset:0;z-index:15;background:#0f1a14;display:none;flex-direction:column;color:#fff}
+#wbbar{display:flex;align-items:center;gap:8px;padding:calc(6px + env(safe-area-inset-top)) 10px 6px;background:#14241b}
+#wbbar b{flex:1;text-align:center;font-size:15px}
+#wb button{min-height:38px;padding:0 10px;border-radius:10px;border:2px solid #34503f;background:#1d3327;color:#fff;font-weight:700;font-size:13px;white-space:nowrap}
+#wb button.on{background:#fff;color:#111;border-color:#fff}
+.wbstage{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:4px}
+#wbsvg{width:100%;height:100%;touch-action:none;user-select:none;-webkit-user-select:none;background:#2a8446;border-radius:10px}
+#wbtools{padding:6px 8px calc(8px + env(safe-area-inset-bottom));background:#14241b;display:flex;flex-direction:column;gap:6px}
+.wbrow{display:flex;gap:6px;overflow-x:auto;align-items:center}
+#wb .sw2{width:34px;min-width:34px;padding:0;border-radius:50%;border:3px solid #34503f}#wb .sw2.on{border-color:#fff;box-shadow:0 0 0 2px #14241b inset}
+.wbrow .sep{width:1px;height:26px;background:#34503f;margin:0 2px}
+@media (min-width:700px){#wb{left:232px}}
+@media (min-width:1024px){#wb{left:260px}}
 </style>
 </head>
 <body>
@@ -718,6 +733,7 @@ function noMatch(){
   ${other?`<div class="card"><b>Match in progress: v ${esc(other.opp)}</b><div class="note">Started on another device or earlier.</div><button class="btn block" data-act="continueLive" data-id="${other.id}">Continue recording</button></div>`:''}
   ${n<2?`<div class="card"><b>Add your squad first</b><div class="note">You need players in the squad before you can pick a team.</div><button class="btn block" data-act="tab" data-tab="squad">Go to Squad</button></div>`:''}
   <button class="btn block lg" data-act="matchNew" ${n<2?'disabled':''}>+ New match</button>
+  <button class="btn sec block" data-act="wbOpen" style="margin-top:10px">🧑‍🏫 Whiteboard</button>
   ${last?`<h2>Last result</h2>${resultCard(last)}`:''}
   </main>`;
 }
@@ -1185,6 +1201,141 @@ function shotMapHtml(evs,pid){
   <div class="note" style="margin-top:6px">${loc.length} shot${loc.length===1?'':'s'} pinned in their half (${goals} goal${goals===1?'':'s'})${own?`, ${own} from your own half`:''}${asOwn?`, ${asOwn} assist${asOwn===1?'':'s'} from deep`:''}.</div>
   ${zr?`<div class="tblwrap"><table class="lt"><thead><tr><th class="nm">Zone</th><th>Shots</th><th>Goals</th></tr></thead><tbody>${zr}</tbody></table></div>`:''}`;
 }
+
+/* ---------- whiteboard: draw plays, move players, show a player at the side of the pitch ---------- */
+const WB_COLORS=['#ffffff','#ffd400','#ff5a5a','#3da5ff','#111111'];
+const WBW=680,WBH=1050;
+function wbState(){if(!DB.wb)DB.wb={pitch:'full',tokens:[],strokes:[],tool:'move',color:'#ffd400',names:true};DB.wb.pitch='full';return DB.wb}
+const wbSave=()=>{try{localStorage.setItem(KEY,JSON.stringify(DB))}catch(e){}};
+const wbId=()=>Math.random().toString(36).slice(2,8);
+function wbPitch(half){
+  const stripes=Array.from({length:10},(_,i)=>`<rect x="0" y="${i*105}" width="680" height="105" fill="${i%2?'#2f8f4d':'#2a8446'}"/>`).join('');
+  return `${stripes}<g fill="none" stroke="rgba(255,255,255,.85)" stroke-width="4"><rect x="10" y="10" width="660" height="1030"/><line x1="10" y1="525" x2="670" y2="525"/><circle cx="340" cy="525" r="91.5"/>
+  <rect x="138.5" y="10" width="403" height="165"/><rect x="248.5" y="10" width="183" height="55"/><path d="M267 175 A91.5 91.5 0 0 0 413 175"/>
+  <rect x="138.5" y="875" width="403" height="165"/><rect x="248.5" y="985" width="183" height="55"/><path d="M267 875 A91.5 91.5 0 0 1 413 875"/></g>
+  <g fill="rgba(255,255,255,.85)"><circle cx="340" cy="525" r="5"/><circle cx="340" cy="120" r="5"/><circle cx="340" cy="930" r="5"/></g>`;
+}
+function wbArrow(st){
+  const [x1,y1]=st.a,[x2,y2]=st.b;const L=Math.hypot(x2-x1,y2-y1);
+  if(L<4)return '';
+  const ux=(x2-x1)/L,uy=(y2-y1)/L,h=Math.min(34,L*.5),w=16;
+  const bx=x2-ux*h,by=y2-uy*h;
+  return `<g data-sid="${st.id}"><line x1="${x1}" y1="${y1}" x2="${bx}" y2="${by}" stroke="${st.c}" stroke-width="7" stroke-linecap="round" style="pointer-events:stroke"/><polygon points="${x2},${y2} ${bx-uy*w},${by+ux*w} ${bx+uy*w},${by-ux*w}" fill="${st.c}"/></g>`;
+}
+function wbStroke(st){
+  if(st.t==='arrow')return wbArrow(st);
+  const d=st.pts.map((q,i)=>(i?'L':'M')+q[0].toFixed(1)+' '+q[1].toFixed(1)).join(' ');
+  return `<path data-sid="${st.id}" d="${d}${st.pts.length===1?' l.1 .1':''}" fill="none" stroke="${st.c}" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" style="pointer-events:stroke"/>`;
+}
+function wbToken(t,names){
+  const mv=`data-tid="${t.id}" transform="translate(${t.x.toFixed(1)} ${t.y.toFixed(1)})" style="cursor:grab"`;
+  if(t.t==='ball')return `<g ${mv}><circle r="17" fill="#fff" stroke="#111" stroke-width="3"/><polygon points="0,-9 9,-3 5,8 -5,8 -9,-3" fill="#111"/></g>`;
+  if(t.t==='cone')return `<g ${mv}><polygon points="0,-20 18,16 -18,16" fill="#ff8a00" stroke="#fff" stroke-width="3"/></g>`;
+  const us=t.t==='us',fill=us?((S.team&&S.team.primary)||'#1b458f'):'#d63031',st=us?((S.team&&S.team.secondary)||'#fff'):'#fff';
+  const lab=t.label==null?'':String(t.label);
+  return `<g ${mv}><circle r="26" fill="${fill}" stroke="${st}" stroke-width="5"/><text y="9" text-anchor="middle" font-family="sans-serif" font-size="${lab.length>2?18:25}" font-weight="800" fill="${us?pickText(fill):'#fff'}">${esc(lab)}</text>${names&&t.name?`<text y="50" text-anchor="middle" font-family="sans-serif" font-size="21" font-weight="800" fill="#fff" stroke="#000" stroke-width="4" paint-order="stroke">${esc(t.name)}</text>`:''}</g>`;
+}
+const pickText=c=>{try{const n=parseInt(c.replace('#',''),16),r=n>>16,g=(n>>8)&255,b=n&255;return (r*299+g*587+b*114)/1000>150?'#111':'#fff'}catch(e){return '#fff'}};
+function wbDraw(){
+  const w=wbState(),svg=$('#wbsvg');if(!svg)return;
+  svg.setAttribute('viewBox',w.pitch==='half'?`0 0 ${WBW} 540`:`0 0 ${WBW} ${WBH}`);
+  svg.innerHTML=wbPitch()+w.strokes.map(wbStroke).join('')+w.tokens.map(t=>wbToken(t,w.names)).join('');
+  svg.classList.toggle('mv',w.tool==='move');
+}
+function wbUI(){
+  const w=wbState();
+  const tb=(k,l)=>`<button class="${w.tool===k?'on':''}" data-act="wbTool" data-v="${k}">${l}</button>`;
+  $('#wbbar').innerHTML=`<button data-act="wbClose">‹ Close</button><b>Whiteboard</b><button data-act="wbShare">📤 Picture</button>`;
+  $('#wbtools').innerHTML=`<div class="wbrow">${tb('move','✋ Move')}${tb('pen','✏️ Draw')}${tb('arrow','➜ Arrow')}${tb('erase','🧽 Erase')}<button data-act="wbUndo">↩ Undo</button></div>
+  <div class="wbrow">${WB_COLORS.map(c=>`<button class="sw2 ${w.color===c?'on':''}" data-act="wbColor" data-v="${c}" style="background:${c}" aria-label="Colour"></button>`).join('')}<span class="sep"></span><button data-act="wbAdd" data-v="us">＋ ${esc((S.team&&S.team.name||'Us').slice(0,8))}</button><button data-act="wbAdd" data-v="opp">＋ Opp</button><button data-act="wbAdd" data-v="ball">⚽</button><button data-act="wbAdd" data-v="cone">🔺</button></div>
+  <div class="wbrow"><button data-act="wbPreset" data-v="team">My team</button><button data-act="wbPreset" data-v="opp">Opposition 4-4-2</button><button data-act="wbNames">${w.names?'Names on':'Names off'}</button><button data-act="wbClearAsk">🗑 Clear</button></div>`;
+}
+function wbOpen(){
+  let el=$('#wb');
+  if(!el){el=document.createElement('div');el.id='wb';el.innerHTML='<div id="wbbar"></div><div class="wbstage"><svg id="wbsvg" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet"></svg></div><div id="wbtools"></div>';document.body.appendChild(el)}
+  el.style.display='flex';V.wbOpen=true;wbUI();wbDraw();
+}
+function wbClose(){const el=$('#wb');if(el)el.style.display='none';V.wbOpen=false;wbSave()}
+function wbSpawn(type){
+  const w=wbState(),n=w.tokens.length,half=w.pitch==='half';
+  const x=340+((n%5)-2)*60,y=(half?280:525)+Math.floor(n/5)%4*60;
+  const used=new Set(w.tokens.filter(t=>t.t===type).map(t=>+t.label));let lab=null;
+  if(type==='us'||type==='opp'){lab=1;while(used.has(lab))lab++}
+  w.tokens.push({id:wbId(),t:type,x,y,label:lab});
+}
+function wbFromPos(pos,half,opp){
+  const xy=POSITIONS[pos];if(!xy)return null;
+  const px=opp?100-xy[0]:xy[0],py=opp?100-xy[1]:xy[1];
+  return[px/100*WBW,half?(opp?40+py*2.2:40+py*4.7):py/100*WBH];
+}
+function wbMyTeam(){
+  const w=wbState(),half=w.pitch==='half';
+  let m=M();let map=null;
+  try{if(m&&Object.keys(m.squad||{}).length)map=m.status==='live'?posMap(m):startPos(m)}catch(e){}
+  if(!map){const pv=S.matches.filter(x=>x.status==='done').sort((a,b)=>(b.date||'').localeCompare(a.date||''))[0];if(pv){m=pv;try{map=startPos(pv)}catch(e){}}}
+  w.tokens=w.tokens.filter(t=>t.t!=='us');
+  if(map&&Object.keys(map).length){
+    Object.keys(map).forEach(id=>{const p=P(id),q=wbFromPos(map[id],half,false);if(p&&q)w.tokens.push({id:wbId(),t:'us',x:q[0],y:q[1],label:p.num,name:sname(p)})});
+  }else{
+    const form=slotsFor(defaultForm(S.team.onPitch||11),S.team.onPitch||11);
+    form.forEach((pos,i)=>{const q=wbFromPos(pos,half,false);if(q)w.tokens.push({id:wbId(),t:'us',x:q[0],y:q[1],label:i+1})});
+  }
+}
+function wbOpp(){
+  const w=wbState(),half=w.pitch==='half';
+  w.tokens=w.tokens.filter(t=>t.t!=='opp');
+  const pts=[[50,92],[15,76],[38,78],[62,78],[85,76],[15,62],[38,64],[62,64],[85,62],[38,52],[62,52]];
+  pts.forEach((q,i)=>{w.tokens.push({id:wbId(),t:'opp',x:q[0]/100*WBW,y:half?40+(100-q[1])*2.2:(100-q[1])/100*WBH,label:i+1})});
+}
+let WBD=null;
+function wbPt(e){const svg=$('#wbsvg'),pt=svg.createSVGPoint();pt.x=e.clientX;pt.y=e.clientY;const q=pt.matrixTransform(svg.getScreenCTM().inverse());return[Math.max(0,Math.min(WBW,q.x)),Math.max(0,Math.min(WBH,q.y))]}
+document.addEventListener('pointerdown',e=>{
+  if(!V.wbOpen||!e.target.closest||!e.target.closest('#wbsvg'))return;
+  const w=wbState(),svg=$('#wbsvg');e.preventDefault();
+  const q=wbPt(e);
+  if(w.tool==='move'){
+    const g=e.target.closest('[data-tid]');if(!g)return;
+    const t=w.tokens.find(x=>x.id===g.dataset.tid);if(!t)return;
+    WBD={m:'tok',t,dx:t.x-q[0],dy:t.y-q[1],g};svg.setPointerCapture(e.pointerId);
+  }else if(w.tool==='erase'){
+    const g=e.target.closest('[data-sid],[data-tid]');if(!g)return;
+    if(g.dataset.sid)w.strokes=w.strokes.filter(x=>x.id!==g.dataset.sid);else w.tokens=w.tokens.filter(x=>x.id!==g.dataset.tid);
+    wbSave();wbDraw();
+  }else if(w.tool==='pen'){
+    const st={id:wbId(),t:'pen',c:w.color,pts:[q]};w.strokes.push(st);WBD={m:'pen',st};wbDraw();svg.setPointerCapture(e.pointerId);
+  }else if(w.tool==='arrow'){
+    const st={id:wbId(),t:'arrow',c:w.color,a:q,b:q};w.strokes.push(st);WBD={m:'arrow',st};svg.setPointerCapture(e.pointerId);
+  }
+},{passive:false});
+document.addEventListener('pointermove',e=>{
+  if(!WBD)return;e.preventDefault();const q=wbPt(e);
+  if(WBD.m==='tok'){const t=WBD.t;t.x=Math.max(0,Math.min(WBW,q[0]+WBD.dx));t.y=Math.max(0,Math.min(WBH,q[1]+WBD.dy));WBD.g.setAttribute('transform',`translate(${t.x.toFixed(1)} ${t.y.toFixed(1)})`)}
+  else if(WBD.m==='pen'){const L=WBD.st.pts[WBD.st.pts.length-1];if(Math.hypot(q[0]-L[0],q[1]-L[1])>3){WBD.st.pts.push(q);const el=document.querySelector(`#wbsvg [data-sid="${WBD.st.id}"]`);if(el)el.outerHTML=wbStroke(WBD.st)}}
+  else if(WBD.m==='arrow'){WBD.st.b=q;const el=document.querySelector(`#wbsvg [data-sid="${WBD.st.id}"]`);const h=wbArrow(WBD.st);if(el)el.outerHTML=h||'';else if(h)$('#wbsvg').insertAdjacentHTML('beforeend',h)}
+},{passive:false});
+function wbEnd(){
+  if(!WBD)return;const d=WBD;WBD=null;const w=wbState();
+  if(d.m==='arrow'&&Math.hypot(d.st.b[0]-d.st.a[0],d.st.b[1]-d.st.a[1])<8){w.strokes=w.strokes.filter(x=>x!==d.st);wbDraw()}
+  wbSave();
+}
+document.addEventListener('pointerup',wbEnd);document.addEventListener('pointercancel',wbEnd);
+async function wbShare(){
+  const svg=$('#wbsvg'),w=wbState();const vb=svg.getAttribute('viewBox').split(' ').map(Number);
+  const c=svg.cloneNode(true);c.setAttribute('width',vb[2]);c.setAttribute('height',vb[3]);c.setAttribute('xmlns','http://www.w3.org/2000/svg');
+  const xml=new XMLSerializer().serializeToString(c);
+  const img=new Image();
+  img.onload=()=>{
+    const cv=document.createElement('canvas');cv.width=vb[2]*1.5;cv.height=vb[3]*1.5;const g=cv.getContext('2d');g.drawImage(img,0,0,cv.width,cv.height);
+    cv.toBlob(b=>{
+      if(!b){toast('Could not make the picture on this device.');return}
+      const f=new File([b],'tactics-board.png',{type:'image/png'});
+      if(navigator.canShare&&navigator.canShare({files:[f]})){navigator.share({files:[f],title:'Tactics board'}).catch(()=>{})}
+      else{const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='tactics-board.png';document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1500);toast('Picture saved')}
+    },'image/png');
+  };
+  img.onerror=()=>toast('Could not make the picture on this device.');
+  img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(xml);
+}
 /* ---------- recording format bar (bottom of the screen) ---------- */
 const REC_MODES=[['buttons','Buttons','Big buttons, no pitch'],['drag','Drag','Drag players onto actions, or tap a player or an action'],['tap','Tap','Tap players on the pitch']];
 function modeBar(){
@@ -1257,6 +1408,7 @@ function liveView(m,ro){
   <div class="row"><button class="btn sec" data-act="logOpen" data-id="${m.id}">${ro?'Full log':'Full log & fixes'}</button>${!ro&&st!=='full'&&st!=='ready'?`<button class="btn sec" data-act="finishEarly">End match early</button>`:''}</div>
   ${ro?'':modeBar()}
   ${ro?'':pinBar(m)}
+  <button class="btn sec block" data-act="wbOpen" style="margin-top:6px">🧑‍🏫 Whiteboard</button>
   ${!ro&&st==='ready'?`<div style="text-align:center;margin-top:8px"><button class="linkbtn" data-act="editLineup">← Edit team</button></div>`:''}
   ${st==='ready'?`<div style="text-align:center;margin-top:4px"><button class="linkbtn" data-act="teamSheet" data-id="${m.id}">📄 Team sheet for the referee</button></div>`:''}
   <h2>Players</h2><div id="ptab">${liveTable(m)}</div>
@@ -1498,6 +1650,7 @@ const CONFIRMS={
     else{logPeriod(m,'Full time');c.state='full'}
     save();V.sheet=null;render()},
   finishEarly(){const m=M();freeze(m);logPeriod(m,'Match ended early');m.clock.state='full';save();V.sheet=null;render()},
+  wbClear(){const w=wbState();w.tokens=[];w.strokes=[];wbSave();V.sheet=null;renderSheet();wbDraw()},
   cancelMatch(){const m=M();S.matches=S.matches.filter(x=>x.id!==m.id);S.activeId=null;save();V.sheet=null;V.err='';render()},
   playerRemove(id){const p=P(id);if(p){p.left=true;if(!p.end)p.end=todayStr()}save();V.sheet=null;render()},
   reset(){DB=blankDB();DB.user={id:'local',email:'',name:'You',isSuper:true};S=EMPTY();V.tab='match';V.matchId=null;V.draft={name:'',age:'',ground:'',primary:'#0b6b3a',secondary:'#ffffff',onPitch:11,periods:2,periodMins:45};save();V.sheet=null;render()}
@@ -2318,6 +2471,9 @@ function settingsBody(){
     ['Recording a match','Start a match from the Match tab, pick the team, then Kick off. Record goals, shots, saves, cards and subs as they happen. Use the strip at the bottom of the screen to switch between Buttons, Drag, Side drag and Tap at any time, even mid-match. Everything you record is saved on your phone straight away.'],
     ['Picking the team','The team screen shows a pitch with your starters in their positions, with subs and Not in squad underneath. Fill it from the last starting team, the last finishing team, or the players who played the fewest minutes last game. Then drag players to change it, or tap a player and tap where they go.'],
     ['Positions','Drag a player to a new spot on the pitch during a match and the move is recorded with the minute (for example LW to CF). In Buttons and Tap formats use Move or Position. A sub takes over the position of the player they replace.'],
+    ['Shot locations','Switch on Pin shot, goal and assist locations on the match screen (or make it the default in Settings). After a shot or goal you tap where it came from on their half of the pitch. There is a bar for anything from your own half, and a shortcut for where the player is standing. Shot maps appear in the match summary and in Stats.'],
+    ['Team stats','On the match screen tap Team stats to count corners, fouls conceded, offsides and their shots. The match summary shows these by half.'],
+    ['Whiteboard','Open Whiteboard from the match screen or Settings. Drag players around, draw lines and arrows, add the ball and cones, and save a picture to show a player at the side of the pitch. My team puts your starters in position.'],
     ['Injuries, joiners and leavers','Open a player in Squad to set a joining date, a leaving date, or mark them as long-term injured. Injured players are left out of the squad by default for new matches. Leavers move to Former players and their number is free to reuse.'],
     ['Stats','The Stats tab is view only. Tap a column heading to sort, and tap again to reverse. Minutes run to the final whistle and include stoppage time.'],
     ['Working without signal','Touchline works offline. Changes are kept on your phone and upload on their own when you are back online. The badge at the top shows the sync status.'],
@@ -2332,6 +2488,7 @@ function settingsBody(){
   <div class="lbl">Theme</div><div class="chips small">${[['light','Light'],['dark','Dark'],['auto','Match my device']].map(([k,l])=>`<button class="${th===k?'on':''}" data-act="setPref" data-k="theme" data-v="${k}">${l}</button>`).join('')}</div>
   <div class="lbl">Font</div><div class="chips small">${fonts.map(([k,l])=>`<button class="${fo===k?'on':''}" data-act="setPref" data-k="font" data-v="${k}" style="font-family:${FONTS[k]}">${l}</button>`).join('')}</div>
   <div class="lbl">App colour</div><div class="swatches"><button class="chip-btn ${!ac?'on':''}" data-act="setAccent" data-i="" style="min-height:44px;border-radius:22px;padding:0 14px;font-weight:600;border:2px solid var(--line);background:var(--card);${!ac?'border-color:var(--p);':''}">Team colours</button>${acc}</div>
+  <h2 class="set-sec">Tools</h2><button class="btn sec block" data-act="wbOpen" style="margin-bottom:10px">🧑‍🏫 Whiteboard</button>
   <h2 class="set-sec">Account</h2>${acct}
   ${canEdit()?`<h2 class="set-sec">Recording</h2><div class="lbl">Default format for new matches</div><div class="chips small">${REC_MODES.map(([k,l])=>`<button class="${(recMode(null))===k?'on':''}" data-act="recDefault" data-v="${k}">${l}</button>`).join('')}</div>`:''}
   ${S.team?`<h2 class="set-sec">Your data</h2><div class="note" style="margin-top:0">One row per player per match (who started, where, minutes) and one row per action. Opens in Excel or Numbers.</div><button class="btn sec block" data-act="exportCsv" style="margin-bottom:10px">⬇ Download all matches (CSV)</button>`:''}
@@ -2442,6 +2599,17 @@ function actExtra(a,ds,el){
       if(dd>0){const st=curStamp(m);m.events.push({id:uid(),t:'tstat',how:ds.side,detail:ds.k,period:st.period,minute:st.minute,ts:Date.now()});buzz()}
       else{const c=m.events.map((e,i)=>[e,i]).filter(([e])=>e.t==='tstat'&&e.detail===ds.k&&e.how===ds.side).sort((a,b)=>(a[0].ts||0)-(b[0].ts||0)).pop();if(c)m.events.splice(c[1],1)}
       save();V.sheet.keepScroll=true;render();return true}
+    case 'wbOpen':wbOpen();return true;
+    case 'wbClose':wbClose();return true;
+    case 'wbTool':wbState().tool=ds.v;wbSave();wbUI();wbDraw();return true;
+    case 'wbColor':{const w=wbState();w.color=ds.v;if(w.tool==='move'||w.tool==='erase')w.tool='pen';wbSave();wbUI();wbDraw();return true}
+    case 'wbAdd':wbSpawn(ds.v);wbState().tool='move';wbSave();wbUI();wbDraw();return true;
+    case 'wbPitch':{const w=wbState();const toHalf=w.pitch!=='half';const k=toHalf?530/WBH:WBH/530;w.tokens.forEach(t=>{t.y=Math.min(toHalf?520:WBH-10,t.y*k)});w.strokes.forEach(st=>{if(st.t==='pen')st.pts=st.pts.map(q=>[q[0],q[1]*k]);else{st.a=[st.a[0],st.a[1]*k];st.b=[st.b[0],st.b[1]*k]}});w.pitch=toHalf?'half':'full';wbSave();wbUI();wbDraw();return true}
+    case 'wbPreset':{if(ds.v==='team')wbMyTeam();else wbOpp();wbSave();wbDraw();return true}
+    case 'wbNames':{const w=wbState();w.names=!w.names;wbSave();wbUI();wbDraw();return true}
+    case 'wbUndo':{const w=wbState();w.strokes.pop();wbSave();wbDraw();return true}
+    case 'wbClearAsk':ask({title:'Clear the board?',msg:'This removes every player and drawing.',ok:'Clear',danger:true,fn:'wbClear'});return true;
+    case 'wbShare':wbShare();return true;
     case 'compSet':V.comp=ds.v;V.smp='';render();return true;
     case 'smpSet':V.smp=ds.v;render();return true;
     case 'capPick':{V.sheet={kind:'captain',d:{}};renderSheet();return true}
