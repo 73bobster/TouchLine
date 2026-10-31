@@ -1316,7 +1316,24 @@ function addEvent(m,o){
 }
 function addEventUndo(m,o){const id=addEvent(m,o);toast('Recorded',{label:'Undo',fn:()=>{m.events=m.events.filter(e=>e.id!==id);save();render()}},5000)}
 function logPeriod(m,labelTxt){const st=curStamp(m);m.events.push({id:uid(),t:'period',label:labelTxt,period:st.period,minute:st.minute,ts:Date.now()})}
-function freeze(m){const c=m.clock;if(c.state==='running'){c.accMs+=Date.now()-c.startedAt;c.startedAt=null}}
+function freeze(m){const c=m.clock;if(c.state==='running'){c.accMs+=Date.now()-c.startedAt;c.startedAt=null;c.state='paused'}}
+/* old matches logged half time and full time with a runaway minute (clock was stopped but still marked running). Put them back. */
+function repairMatches(){
+  let n=0;
+  for(const m of (S.matches||[])){
+    if(!m.events||!m.periods||!m.periodMins)continue;
+    const cap=m.periods*m.periodMins+60;
+    const bad=m.events.filter(e=>e.t==='period'&&e.minute>cap);if(!bad.length)continue;
+    const real=m.events.filter(e=>e.t!=='period'&&e.t!=='note'&&e.minute<=cap);
+    const lastIn=pr=>real.filter(e=>e.period===pr).reduce((a,e)=>Math.max(a,e.minute),0);
+    for(const e of bad){
+      const full=/full time|ended early/i.test(e.label||'');
+      const end=e.period*m.periodMins;
+      e.minute=full?Math.max(end,lastIn(e.period)):end;n++;
+    }
+  }
+  if(n){try{save()}catch(x){}}
+}
 let wake=null;
 async function lockScreen(){try{if('wakeLock' in navigator&&!wake){wake=await navigator.wakeLock.request('screen');wake.addEventListener('release',()=>{wake=null})}}catch(e){}}
 function unlockScreen(){try{wake&&wake.release()}catch(e){}wake=null}
@@ -2326,6 +2343,7 @@ function actExtra(a,ds,el){
 /* ---------- render ---------- */
 function render(){
   applyTheme();
+  try{repairMatches()}catch(e){}
   const app=$('#app');
   const bd=document.body.dataset;
   bd.view=(CLOUD&&!DB.user)?'auth':(!S.team||V.newTeam)?'noteam':'app';bd.tab=V.tab;
