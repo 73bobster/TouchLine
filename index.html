@@ -339,7 +339,9 @@ main.lvm{padding-top:4px}
 .d2 .bench{max-height:128px}
 .d2{--d2h:clamp(280px,calc(100dvh - 365px),700px);display:grid;grid-template-columns:minmax(0,1fr) 76px;gap:6px;margin:4px 0 6px}
 .d2 .pitch{height:min(var(--d2h),calc((100vw - 110px)*1.75))}
-.d2 .acts{height:auto;align-self:stretch}
+.d2{--d2h:min(clamp(280px,calc(100dvh - 365px),700px),calc((100vw - 110px)*1.75))}
+.d2 .pitch{height:auto!important;align-self:stretch;min-height:280px}
+.d2 .acts{height:var(--d2h);align-self:start}
 .d2 .bench{grid-column:1/-1;margin:0;min-height:62px}
 .d2 .bench .bl{writing-mode:vertical-rl;transform:rotate(180deg)}
 .d2 .acts .dz{min-height:0}
@@ -1394,7 +1396,7 @@ function liveView(m,ro){
   else if(st==='full')ctl=`<button class="btn" data-act="finish">Finish match</button>`;
   }
   const stText={ready:'Ready',running:'Playing',paused:'Stopped',break:(m.periods===2?'Half time':'Break'),full:'Full time'}[st];
-  const pn=st==='break'||st==='full'||st==='ready'?`<span id="stt">${stText}</span>`:`${esc(pname(m,Math.min(c.period,m.periods)))} · <span id="stt">${stText}</span>`;
+  const pn=st==='break'||st==='full'||st==='ready'?`<span id="stt">${stText}</span>`:st==='running'?`<span id="stt">${esc(pname(m,Math.min(c.period,m.periods)))}</span>`:`${esc(pname(m,Math.min(c.period,m.periods)))} · <span id="stt">${stText}</span>`;
   const evg=`<div class="evg">${EVBTN.map(b=>`<button class="${b.c||''}" data-act="ev" data-k="${b.k}"><i>${b.i}</i>${b.l}</button>`).join('')}</div>`;
   return `<header class="top live"><div class="sb"><div class="tm">${crest(S.team,24)}<span>${esc(S.team.name)}</span></div><div class="score" id="score">${sc.us} – ${sc.them}</div><div class="tm r"><span>${esc(m.opp)}</span></div></div></header>
   <main class="lvm">
