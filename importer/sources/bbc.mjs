@@ -28,7 +28,7 @@ export function htmlToLines(html, whole = false) {
   const body = (main ? main[0] : html)
     .replace(/<script[\s\S]*?<\/script>/gi, '')
     .replace(/<style[\s\S]*?<\/style>/gi, '')
-    .replace(/<\/(div|li|ul|ol|span|p|h[1-6]|a|section|button|time)>|<br\s*\/?>/gi, '\n')
+    .replace(/<\/(div|li|ul|ol|span|p|h[1-6]|a|section|button|time|dt|dd|tr|td|th|label|strong|small)>|<br\s*\/?>/gi, '\n')
     .replace(/<[^>]+>/g, '');
   return decode(body).split('\n').map((l) => l.replace(/\s+/g, ' ').trim()).filter(Boolean);
 }

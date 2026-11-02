@@ -175,3 +175,8 @@ test('match page: a player with two goals in one entry, and a second-yellow dism
   assert.deepEqual([red.minute, red.side, red.player, red.detail], [62, 'away', 'J. Iredale', 'second yellow']);
   assert.equal(d.notes.length, 0);
 });
+
+test('match officials in a definition list are read (referee)', () => {
+  const html = '<html><body><main><div><dl><div><dt>Referee: </dt><dd>Don Robertson</dd></div><div><dt>Video Assistant Referee: </dt><dd>Matthew MacDermid</dd></div></dl></div></main></body></html>';
+  assert.equal(parseMatchPage(html).referee, 'Don Robertson');
+});
