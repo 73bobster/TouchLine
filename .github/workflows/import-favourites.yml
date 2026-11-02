@@ -16,7 +16,7 @@ on:
         description: 'Source: bbc (default) or apifootball (paid plan, needs APIFOOTBALL_KEY)'
         default: bbc
   schedule:
-    - cron: '0 12-23 * * *'   # UTC hours that can fall inside 13:00-23:59 UK in both GMT and BST
+    - cron: '55 12-23 * * *'   # UTC hours that can fall inside 13:00-23:59 UK in both GMT and BST
 permissions:
   contents: read
 concurrency:
