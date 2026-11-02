@@ -665,7 +665,7 @@ function applyTheme(){
   r.setProperty('--p',p);r.setProperty('--pt',textOn(p));r.setProperty('--s',s);r.setProperty('--st',textOn(s));
   const mt=document.querySelector('meta[name=theme-color]');if(mt)mt.setAttribute('content',p);
 }
-const crest=(t,px)=>`<span class="crest" style="width:${px}px;height:${px}px;font-size:${Math.round(px*.38)}px">${esc((t.name||'T').trim().split(/\s+/).slice(0,2).map(w=>w[0]).join('').toUpperCase())}</span>`;
+const crest=(t,px)=>`<span class="crest" style="width:${px}px;height:${px}px;font-size:${Math.round(px*.38)}px${t.primary?`;background:${t.primary};color:${textOn(t.primary)};border-color:${t.secondary||'#fff'}`:''}">${esc((t.name||'T').trim().split(/\s+/).slice(0,2).map(w=>w[0]).join('').toUpperCase())}</span>`;
 
 /* ---------- views ---------- */
 function syncBadge(){
