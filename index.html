@@ -2159,6 +2159,7 @@ async function joinWithCode(code){
   await syncNow(true);if(DB.teams[r.team_id])setCur(r.team_id);return r;
 }
 async function createTeamCloud(){
+  if(V.busy)return;
   const t=V.draft;if(!t.name.trim()){V.err='Give your team a name first.';render();return}
   const id='t'+uid();V.err='';V.busy=true;render();
   try{
@@ -2209,7 +2210,11 @@ async function pushTeam(TD){
     for(let i=0;i<up.length;i+=100){
       const part=up.slice(i,i+100);
       const groups={};part.forEach(x=>{(groups[Object.keys(x[2]).join(',')]=groups[Object.keys(x[2]).join(',')]||[]).push(x)}); // rows with different columns go in separate requests
-      for(const g of Object.values(groups))await rest('POST','/'+tb+'?on_conflict='+PK[tb].join(','),g.map(x=>x[2]),'resolution=merge-duplicates,return=minimal');
+      for(const g of Object.values(groups)){
+        if(tb==='teams'&&!DB.user.isSuper){ // coaches may update their team but not insert rows, so patch instead of upsert
+          for(const x of g){const {id:_i,...body}=x[2];await rest('PATCH','/teams?id=eq.'+encodeURIComponent(x[0]),body,'return=minimal')}
+        }else await rest('POST','/'+tb+'?on_conflict='+PK[tb].join(','),g.map(x=>x[2]),'resolution=merge-duplicates,return=minimal');
+      }
       part.forEach(x=>{old[x[0]]=x[1]});n+=part.length;
     }
     for(const k of Object.keys(old).filter(k=>!(k in cur))){
