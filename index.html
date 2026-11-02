@@ -1592,7 +1592,6 @@ function summaryView(m){
   <div class="hero"><span class="res">${res}</span><div class="big">${sc.us} – ${sc.them}</div><div style="font-weight:700">${esc(S.team.name)} v ${esc(m.opp)}</div><div class="meta">${esc(compLbl(m))} · ${m.venue==='home'?'Home':m.venue==='away'?'Away':'Neutral'}${m.location?' · '+esc(m.location):''}${+m.attendance>0?' · '+(+m.attendance).toLocaleString('en-GB')+' attended':''}${m.referee?' · Ref: '+esc(m.referee):''}</div></div>
   ${m.status==='live'?`<button class="btn block" data-act="continueMatch" style="margin:10px 0">Continue recording</button>`:''}
   <div class="card" style="margin-top:12px"><div class="lbl" style="margin-top:0">Summary</div><p style="margin:4px 0 0;line-height:1.5">${esc(matchSummary(m))}</p></div>
-  <h2>By half</h2><div class="card" style="padding:6px 10px">${halfTable(m)}</div>
   ${shotMapHtml(ev)?`<h2>Shot map</h2>${shotMapHtml(ev)}`:''}
   ${sec('Goals',goals.map(e=>row(e,esc(e.how==='Opp own goal'?'Opposition own goal':label(e.playerId))+(e.how&&e.how!=='Opp own goal'?` <span class="stat">${esc(e.how.toLowerCase())}</span>`:'')+(e.assistId?`<br><span class="stat">assist ${esc(label(e.assistId))}</span>`:''))))}
   ${sec('Goals against',against.map(e=>row(e,e.how==='Own goal'?'Own goal — '+esc(label(e.playerId)):esc([e.oppNum?'#'+e.oppNum:'',e.oppName||'Opposition'].filter(Boolean).join(' '))+(e.how?` <span class="stat">${esc(e.how.toLowerCase())}</span>`:''))))}
