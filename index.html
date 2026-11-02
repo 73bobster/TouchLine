@@ -678,7 +678,7 @@ const header=(title,sub,right)=>`<header class="top"><div class="hrow">${S.team?
 
 function tabbar(){
   const live=M()&&M().status==='live';
-  const t=(k,i,l,cls)=>`<button class="${V.tab===k?'on':''}" data-act="tab" data-tab="${k}"><i>${i}</i>${l}${cls==='live'?' <span style="color:var(--bad)">●</span>':''}</button>`;
+  const t=(k,i,l,cls)=>`<button class="${V.tab===k||(k==='history'&&V.tab==='pro')?'on':''}" data-act="tab" data-tab="${k}"><i>${i}</i>${l}${cls==='live'?' <span style="color:var(--bad)">●</span>':''}</button>`;
   const lv=live||(!canEdit()&&liveOther());
   return `<nav class="tabs"><div>${t('match','⚽','Match',lv?'live':'')}${t('squad','👥','Squad')}${t('stats','📊','Stats')}${t('attend','✅','Attend')}${t('history','📋','Results')}${t('team','🎽','Team')}</div></nav>`;
 }
@@ -1537,7 +1537,7 @@ function historyView(){
   if(V.matchId){const m=VM();if(m)return summaryView(m)}
   const ms=S.matches.filter(m=>m.status==='done'&&compOk(m)).sort((a,b)=>(b.date+b.time).localeCompare(a.date+a.time));
   const w=ms.filter(m=>score(m).us>score(m).them).length,d=ms.filter(m=>score(m).us===score(m).them).length,l=ms.length-w-d;
-  return header('Results',ms.length?`P${ms.length} · W${w} D${d} L${l}`:'')+`<main>${formStrip(ms)}${compBar()}${seasonCard(ms)}${ms.length?`<div class="cols">${ms.map(resultCard).join('')}</div>`:'<div class="empty"><b>No finished matches yet</b>Record your first match and it will appear here.</div>'}</main>`;
+  return header('Results',ms.length?`P${ms.length} · W${w} D${d} L${l}`:'')+`<main>${CLOUD?`<div class="prow" data-act="proOpenList" style="cursor:pointer"><div class="num">🏴</div><div class="nm">Pro games<small>Rangers and Hearts results, fixtures and line-ups</small></div><span style="color:var(--mute)">›</span></div>`:''}${formStrip(ms)}${compBar()}${seasonCard(ms)}${ms.length?`<div class="cols">${ms.map(resultCard).join('')}</div>`:'<div class="empty"><b>No finished matches yet</b>Record your first match and it will appear here.</div>'}</main>`;
 }
 
 function summaryView(m){
@@ -2704,6 +2704,7 @@ function copyLink(){
   try{(navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(()=>toast('Link copied'),fb)}catch(e){fb()}
 }
 function actExtra(a,ds,el){
+  if(a.startsWith('pro')&&proAct(a,ds))return true;
   if(EDIT_ACTS.has(a)&&!canEdit()){toast('View only');return true}
   const adm=()=>canEdit()||(DB.user&&DB.user.isSuper);
   switch(a){
@@ -2859,6 +2860,90 @@ function actExtra(a,ds,el){
   return false;
 }
 
+/* ---------- pro games (Rangers, Hearts): read-only, from the importer's tables ---------- */
+const PROKEY='touchline-pro-v1';
+const PRO=(()=>{let o={};try{o=JSON.parse(localStorage.getItem(PROKEY)||'{}')}catch(e){}return Object.assign({matches:[],detail:{},at:0,filter:'all',ref:null,busy:false,err:''},o,{busy:false,err:'',ref:null})})();
+const proSave=()=>{try{localStorage.setItem(PROKEY,JSON.stringify({matches:PRO.matches,detail:PRO.detail,at:PRO.at,filter:PRO.filter}))}catch(e){}};
+const PROTEAMS={rangers:'Rangers','heart-of-midlothian':'Hearts'};
+const proDate=d=>{try{return new Date(d+'T12:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short',year:'numeric'})}catch(e){return d}};
+const proKey=m=>m.source_ref;
+async function proLoad(force){
+  if(!CLOUD||!DB.user||PRO.busy)return;
+  if(!force&&PRO.at&&Date.now()-PRO.at<300000)return;
+  PRO.busy=true;PRO.err='';render();
+  try{
+    PRO.matches=await rest('GET','/pro_matches?select=source,source_ref,teams,comp,match_date,kickoff,home,away,home_goals,away_goals,status,raw_status,venue,attendance,referee,home_manager,away_manager,home_formation,away_formation,detail_fetched_at&order=match_date.asc&limit=500')||[];
+    PRO.at=Date.now();proSave();
+  }catch(e){PRO.err=navigator.onLine?(e.status===401||e.code==='auth'?'Sign in again to load these games.':'Could not load games ('+e.message+').'):'You are offline.'}
+  PRO.busy=false;render();
+}
+async function proDetail(m){
+  const k=proKey(m);
+  if(!CLOUD||!DB.user||PRO.busy)return;
+  PRO.busy=true;render();
+  try{
+    const q='source=eq.'+encodeURIComponent(m.source)+'&source_ref=eq.'+encodeURIComponent(m.source_ref);
+    const [pl,ev]=await Promise.all([rest('GET','/pro_match_players?select=side,num,name,pos,starter,captain,on_min,off_min,replaced_by,replaced,yellow,red&'+q+'&order=num.asc'),rest('GET','/pro_match_events?select=seq,type,side,minute,player,assist,on_player,detail&'+q+'&order=seq.asc')]);
+    PRO.detail[k]={players:pl||[],events:ev||[]};proSave();PRO.err='';
+  }catch(e){PRO.err=navigator.onLine?'Could not load the game detail ('+e.message+').':'You are offline, and this game has not been saved on this device yet.'}
+  PRO.busy=false;render();
+}
+function proRow(m){
+  const fin=m.status==='finished',sc=fin?`${m.home_goals}–${m.away_goals}`:(m.kickoff?String(m.kickoff).slice(0,5):'v');
+  const tm=(m.teams||[]).map(t=>PROTEAMS[t]||t).join(' & ');
+  return `<div class="prow" data-act="proOpen" data-id="${esc(proKey(m))}" style="cursor:pointer"><div class="num" style="font-size:${fin?17:14}px;width:54px">${esc(sc)}</div><div class="nm">${esc(m.home)} v ${esc(m.away)}<small>${esc(m.comp||'')} · ${esc(proDate(m.match_date))}${m.status==='live'?' · live':m.status==='other'?' · '+esc(m.raw_status||''):''}</small></div><span style="color:var(--mute)" class="stat">${esc(tm)}</span><span style="color:var(--mute)">›</span></div>`;
+}
+function proList(){
+  const f=PRO.filter,all=PRO.matches.filter(m=>f==='all'||(m.teams||[]).includes(f));
+  const today=todayStr();
+  const next=all.filter(m=>m.status!=='finished'&&m.match_date>=today).sort((a,b)=>(a.match_date+(a.kickoff||'')).localeCompare(b.match_date+(b.kickoff||'')));
+  const done=all.filter(m=>!next.includes(m)).sort((a,b)=>b.match_date.localeCompare(a.match_date));
+  const chips=`<div class="chips small">${[['all','Both'],['rangers','Rangers'],['heart-of-midlothian','Hearts']].map(([k,l])=>`<button class="${f===k?'on':''}" data-act="proFilter" data-val="${k}">${l}</button>`).join('')}</div>`;
+  let body='';
+  if(!CLOUD)body='<div class="empty"><b>Sign in to see these</b>Rangers and Hearts games are loaded from your account, so they are not available in no-account mode.</div>';
+  else if(!PRO.matches.length)body=PRO.busy?'<div class="empty"><b>Loading…</b></div>':`<div class="empty"><b>No games yet</b>${esc(PRO.err||'Nothing has been imported yet.')}</div>`;
+  else body=(PRO.err?`<div class="err">${esc(PRO.err)}</div>`:'')+(next.length?`<h2>Coming up</h2>${next.map(proRow).join('')}`:'')+(done.length?`<h2>Results</h2>${done.map(proRow).join('')}`:'')+(all.length?'':'<div class="empty"><b>No games</b></div>');
+  const upd=PRO.at?`Updated ${new Date(PRO.at).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}`:'';
+  return header('Pro games',upd)+`<main>${chips}${body}<div class="row"><button class="btn sec" data-act="proRefresh"${PRO.busy?' disabled':''}>${PRO.busy?'Loading…':'Refresh'}</button><button class="btn sec" data-act="proBack">‹ Results</button></div><p class="note">Results and line-ups from BBC Sport, updated hourly from 1pm to midnight UK time.</p></main>`;
+}
+function proDetailView(m){
+  const d=PRO.detail[proKey(m)];const fin=m.status==='finished';
+  const meta=[m.comp,proDate(m.match_date),m.venue,m.attendance?m.attendance.toLocaleString('en-GB')+' attended':'',m.referee?'Ref: '+m.referee:''].filter(Boolean).join(' · ');
+  const nm=s=>s==='home'?m.home:m.away;
+  const hdr=`<header class="top"><div class="hrow"><button data-act="proClose" style="background:rgba(255,255,255,.2);color:var(--pt);min-width:44px;padding:0">‹</button><div style="flex:1"><h1>Pro game</h1><div class="sub">${esc(proDate(m.match_date))}</div></div></div></header>`;
+  const hero=`<div class="hero"><span class="res">${fin?'Full time':m.status==='live'?'Live':m.status==='other'?esc(m.raw_status||'Not played'):'Kick-off '+esc(String(m.kickoff||'').slice(0,5)||'TBC')}</span><div class="big">${fin?`${m.home_goals} – ${m.away_goals}`:'v'}</div><div style="font-weight:700">${esc(m.home)} v ${esc(m.away)}</div><div class="meta">${esc(meta)}</div></div>`;
+  if(!d)return hdr+`<main>${hero}${PRO.err?`<div class="err">${esc(PRO.err)}</div>`:''}${fin?`<div class="empty">${PRO.busy?'<b>Loading…</b>':'<b>Detail not on this device</b>Connect to the internet to load goals, cards and line-ups.'}</div>`:'<div class="empty">Line-ups and events appear after the game.</div>'}</main>`;
+  const ev=d.events;
+  const row=(e,txt)=>`<div class="irow"><b>${e.minute}'</b><span>${txt}</span></div>`;
+  const sec=(t,rows)=>rows.length?`<h2>${t}</h2><div class="card" style="padding:6px 14px">${rows.join('')}</div>`:'';
+  const goals=ev.filter(e=>e.type==='goal'||e.type==='own_goal').map(e=>row(e,`<b style="width:auto">${esc(e.player)}</b>${e.type==='own_goal'?' <span class="stat">own goal</span>':e.detail?` <span class="stat">${esc(e.detail)}</span>`:''} <span class="stat">· ${esc(nm(e.side))}</span>${e.assist?`<br><span class="stat">assist ${esc(e.assist)}</span>`:''}`));
+  const cards=ev.filter(e=>e.type==='yellow'||e.type==='red').map(e=>row(e,`${e.type==='yellow'?'🟨':'🟥'} ${esc(e.player)}${e.detail?` <span class="stat">${esc(e.detail)}</span>`:''} <span class="stat">· ${esc(nm(e.side))}</span>`));
+  const subs=ev.filter(e=>e.type==='sub').map(e=>row(e,`↑ ${esc(e.on_player||'')}<br>↓ ${esc(e.player)} <span class="stat">· ${esc(nm(e.side))}</span>`));
+  const side=s=>{
+    const ps=d.players.filter(p=>p.side===s);if(!ps.length)return '';
+    const line=p=>`<div class="irow"><b style="width:34px">${p.num}</b><span>${esc(p.name)}${p.captain?' <span class="stat">(C)</span>':''} <span class="stat">${esc(p.pos||'')}</span>${(p.yellow||[]).map(x=>` <span class="stat">🟨${x}'</span>`).join('')}${(p.red||[]).map(x=>` <span class="stat">🟥${x}'</span>`).join('')}${p.off_min!=null?` <span class="stat">↓${p.off_min}'</span>`:''}${p.on_min!=null?` <span class="stat">↑${p.on_min}'</span>`:''}</span></div>`;
+    const fm=s==='home'?m.home_formation:m.away_formation,mg=s==='home'?m.home_manager:m.away_manager;
+    return `<div class="card" style="padding:6px 14px"><div class="lbl" style="margin-top:8px"><b style="color:var(--ink)">${esc(nm(s))}</b>${fm?' · '+esc(fm):''}${mg?' · '+esc(mg):''}</div>${ps.filter(p=>p.starter).map(line).join('')}<div class="lbl" style="margin-top:10px">Substitutes</div>${ps.filter(p=>!p.starter).map(line).join('')}</div>`;
+  };
+  const lu=side('home')+side('away');
+  return hdr+`<main>${hero}${PRO.err?`<div class="err">${esc(PRO.err)}</div>`:''}${sec('Goals',goals)}${sec('Cards',cards)}${sec('Substitutions',subs)}${lu?`<h2>Line-ups</h2><div class="cols">${lu}</div>`:''}${!ev.length&&!d.players.length?'<div class="empty">No detail was published for this game.</div>':''}</main>`;
+}
+function proView(){
+  const m=PRO.ref&&PRO.matches.find(x=>proKey(x)===PRO.ref);
+  return m?proDetailView(m):proList();
+}
+function proAct(a,ds){
+  switch(a){
+    case 'proOpenList':V.top=1;V.tab='pro';PRO.ref=null;PRO.err='';render();proLoad();return true;
+    case 'proBack':V.top=1;V.tab='history';render();return true;
+    case 'proFilter':PRO.filter=ds.val;proSave();render();return true;
+    case 'proRefresh':proLoad(true);return true;
+    case 'proOpen':{const m=PRO.matches.find(x=>proKey(x)===ds.id);if(!m)return true;PRO.ref=ds.id;PRO.err='';V.top=1;render();if(m.status==='finished'&&!PRO.detail[ds.id])proDetail(m);return true}
+    case 'proClose':PRO.ref=null;PRO.err='';V.top=1;render();return true;
+  }
+  return false;
+}
+
 /* ---------- render ---------- */
 function render(){
   applyTheme();
@@ -2874,6 +2959,7 @@ function render(){
   else if(V.tab==='squad')body=squadView();
   else if(V.tab==='stats')body=statsView();
   else if(V.tab==='attend')body=attendView();
+  else if(V.tab==='pro')body=proView();
   else if(V.tab==='history')body=historyView();
   else body=matchView();
   app.innerHTML=body+tabbar();
