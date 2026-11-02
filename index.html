@@ -1313,13 +1313,14 @@ function shotMapHtml(evs,pid){
   const loc=taken.filter(e=>e.y<=PH),own=taken.length-loc.length;
   const asLoc=evs.filter(e=>isGF(e)&&e.ax!=null&&e.ay!=null&&(!pid||e.assistId===pid));
   const lines=asLoc.filter(e=>e.ay<=PH&&e.x!=null&&e.y<=PH),asOwn=asLoc.filter(e=>e.ay>PH).length;
-  if(!loc.length&&!own&&!asLoc.length)return '';
+  const nol=evs.filter(e=>(e.t==='shot'||isGF(e))&&e.x==null&&(!pid||e.playerId===pid)).length;
+  if(!loc.length&&!own&&!asLoc.length&&!nol)return '';
   const zc={};loc.forEach(e=>{const z=zoneOf(e.x,e.y).name;(zc[z]=zc[z]||{s:0,g:0}).s++;if(isGF(e))zc[z].g++});
   const zr=Object.entries(zc).sort((a,b)=>b[1].s-a[1].s).map(([z,v])=>`<tr><td class="nm">${esc(z)}</td><td>${v.s}</td><td>${v.g}</td></tr>`).join('');
   const goals=loc.filter(isGF).length;
   return `<div class="smap">${PIN_LINES}<svg class="ln" viewBox="0 0 68 52.5" preserveAspectRatio="none">${lines.map(e=>`<line x1="${e.ax}" y1="${e.ay}" x2="${e.x}" y2="${e.y}" vector-effect="non-scaling-stroke"/>`).join('')}</svg>${asLoc.filter(e=>e.ay<=PH).map(e=>`<span class="sd ast" title="Assist" style="${pct(e.ax,e.ay)}"></span>`).join('')}${loc.map(e=>`<span class="sd ${isGF(e)?'goal':SHOT_CLS[e.detail]||'off'}" style="${pct(e.x,e.y)}"></span>`).join('')}</div>
   <div class="leg"><span><i class="sd goal"></i>Goal</span><span><i class="sd on"></i>On target</span><span><i class="sd off"></i>Off target</span><span><i class="sd blk"></i>Blocked</span><span><i class="sd post"></i>Post</span><span><i class="sd ast"></i>Assist (dashed line to the shot)</span></div>
-  <div class="note" style="margin-top:6px">${loc.length} shot${loc.length===1?'':'s'} pinned in their half (${goals} goal${goals===1?'':'s'})${own?`, ${own} from your own half`:''}${(()=>{const n=evs.filter(e=>isGF(e)&&e.x==null&&(!pid||e.playerId===pid)).length;return n?`. ${n} goal${n===1?'':'s'} had no location pinned`:''})()}${asOwn?`, ${asOwn} assist${asOwn===1?'':'s'} from deep`:''}.</div>
+  <div class="note" style="margin-top:6px">${loc.length} shot${loc.length===1?'':'s'} pinned in their half (${goals} goal${goals===1?'':'s'})${own?`, ${own} from your own half`:''}${(()=>{return nol?`. ${nol} shot${nol===1?'':'s'} or goal${nol===1?'':'s'} ${nol===1?'has':'have'} no location pinned yet (open Full log &amp; edit and tap 📍 on it)`:''})()}${asOwn?`, ${asOwn} assist${asOwn===1?'':'s'} from deep`:''}.</div>
   ${zr?`<div class="tblwrap"><table class="lt"><thead><tr><th class="nm">Zone</th><th>Shots</th><th>Goals</th></tr></thead><tbody>${zr}</tbody></table></div>`:''}`;
 }
 
