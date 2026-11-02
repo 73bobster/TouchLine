@@ -763,10 +763,16 @@ function noMatch(){
   </main>`;
 }
 
+function matchRound(m){
+  const t=S.team;if(!t||!t.proTeam||typeof PRO==='undefined'||!PRO.matches.length)return '';
+  const pm=PRO.matches.find(x=>x.match_date===m.date&&[x.home,x.away].some(n=>{const a=clubKey(n),b=clubKey(m.opp);return a&&b&&(a.includes(b)||b.includes(a))}));
+  return pm?proRound(pm):'';
+}
+const compLbl=m=>{const r=matchRound(m);return (m.comp||'')+(r?` (${r})`:'')};
 function resultCard(m){
   const sc=score(m);const res=sc.us>sc.them?'W':sc.us<sc.them?'L':'D';
   const col=res==='W'?'var(--ok)':res==='L'?'var(--bad)':'var(--warn)';
-  return `<div class="prow" data-act="histOpen" data-id="${m.id}" style="cursor:pointer"><div class="num" style="background:${col};color:#fff">${res}</div><div class="nm">${esc(S.team.name)} ${sc.us}–${sc.them} ${esc(m.opp)}<small>${esc(m.comp||'')} · ${m.venue==='home'?'Home':m.venue==='away'?'Away':'Neutral'} · ${esc(dateStr(m))}</small></div><span style="color:var(--mute)">›</span></div>`;
+  return `<div class="prow" data-act="histOpen" data-id="${m.id}" style="cursor:pointer"><div class="num" style="background:${col};color:#fff">${res}</div><div class="nm">${esc(S.team.name)} ${sc.us}–${sc.them} ${esc(m.opp)}<small>${esc(compLbl(m))} · ${m.venue==='home'?'Home':m.venue==='away'?'Away':'Neutral'} · ${esc(dateStr(m))}</small></div><span style="color:var(--mute)">›</span></div>`;
 }
 function dateStr(m){try{return new Date(m.date+'T'+(m.time||'12:00')).toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short',year:'numeric'})}catch(e){return m.date}}
 
@@ -780,6 +786,7 @@ function detailsView(m){
   <label>Ground / pitch<input data-bind="m.location" value="${esc(m.location)}" placeholder="${m.venue==='home'?'Your home ground':'Where is it?'}" autocomplete="off"></label>
   <label>Competition<input data-bind="m.comp" list="compl" value="${esc(m.comp)}" placeholder="League, cup, friendly…" autocomplete="off"></label><datalist id="compl">${comps.map(o=>`<option value="${esc(o)}">`).join('')}</datalist>
   <label>Referee<input data-bind="m.referee" value="${esc(m.referee||'')}" placeholder="Referee's name (optional)" autocomplete="off"></label>
+  <label>Attendance<input type="number" inputmode="numeric" data-bind="m.attendance" value="${esc(m.attendance||'')}" placeholder="Crowd (optional)"></label>
   <div class="row"><label>Date<input type="date" data-bind="m.date" value="${esc(m.date)}"></label><label>Kick-off<input type="time" data-bind="m.time" value="${esc(m.time)}"></label></div>
   <div class="note">${m.onPitch}-a-side · ${m.periods} × ${m.periodMins} mins (from your team format)</div>
   ${V.err?`<div class="err">${esc(V.err)}</div>`:''}
@@ -1171,6 +1178,7 @@ function mdetBody(d){
   <label>Ground / pitch<input data-sbind="location" value="${esc(d.location||'')}" autocomplete="off"></label>
   <label>Competition<input data-sbind="comp" list="compl2" value="${esc(d.comp||'')}" autocomplete="off"></label><datalist id="compl2">${comps.map(o=>`<option value="${esc(o)}">`).join('')}</datalist>
   <label>Referee<input data-sbind="referee" value="${esc(d.referee||'')}" autocomplete="off"></label>
+  <label>Attendance<input type="number" inputmode="numeric" data-sbind="attendance" value="${esc(d.attendance||'')}" placeholder="Crowd (optional)"></label>
   <div class="row"><label>Date<input type="date" data-sbind="date" value="${esc(d.date||'')}"></label><label>Kick-off<input type="time" data-sbind="time" value="${esc(d.time||'')}"></label></div>
   <div class="row"><label>Periods<input type="number" inputmode="numeric" data-sbind="periods" value="${esc(d.periods)}"></label><label>Mins each<input type="number" inputmode="numeric" data-sbind="periodMins" value="${esc(d.periodMins)}"></label></div>
   ${d.err?`<div class="err">${esc(d.err)}</div>`:''}
@@ -1581,7 +1589,7 @@ function summaryView(m){
   const row=(e,txt)=>`<div class="irow"><b>${fmtMin(e,m)}</b><span>${txt}</span></div>`;
   return `<header class="top"><div class="hrow"><button data-act="histBack" style="background:rgba(255,255,255,.2);color:var(--pt);min-width:44px;padding:0">‹</button><div style="flex:1;min-width:0">${S.team?`<div class="tn">${esc(S.team.name)}</div>`:''}<h1>Match summary</h1><div class="sub">${esc(dateStr(m))}</div></div></div></header>
   <main>
-  <div class="hero"><span class="res">${res}</span><div class="big">${sc.us} – ${sc.them}</div><div style="font-weight:700">${esc(S.team.name)} v ${esc(m.opp)}</div><div class="meta">${esc(m.comp||'')} · ${m.venue==='home'?'Home':m.venue==='away'?'Away':'Neutral'}${m.location?' · '+esc(m.location):''}</div></div>
+  <div class="hero"><span class="res">${res}</span><div class="big">${sc.us} – ${sc.them}</div><div style="font-weight:700">${esc(S.team.name)} v ${esc(m.opp)}</div><div class="meta">${esc(compLbl(m))} · ${m.venue==='home'?'Home':m.venue==='away'?'Away':'Neutral'}${m.location?' · '+esc(m.location):''}${+m.attendance>0?' · '+(+m.attendance).toLocaleString('en-GB')+' attended':''}${m.referee?' · Ref: '+esc(m.referee):''}</div></div>
   ${m.status==='live'?`<button class="btn block" data-act="continueMatch" style="margin:10px 0">Continue recording</button>`:''}
   <div class="card" style="margin-top:12px"><div class="lbl" style="margin-top:0">Summary</div><p style="margin:4px 0 0;line-height:1.5">${esc(matchSummary(m))}</p></div>
   <h2>By half</h2><div class="card" style="padding:6px 10px">${halfTable(m)}</div>
@@ -2162,7 +2170,7 @@ function rowsFor(TD){
   R.teams[tid]={id:tid,name:t.name||'',age:t.age||'',ground:t.ground||'',primary_colour:t.primary||null,secondary_colour:t.secondary||null,on_pitch:num(t.onPitch),periods:num(t.periods),period_mins:num(t.periodMins),pro_team:(t.proOn&&t.proTeam)?t.proTeam:null,deleted:false};
   TD.players.forEach(p=>{R.players[p.id]={id:p.id,team_id:tid,num:num(p.num),name:p.name||'',pos:p.pos||null,left_squad:!!p.left,screen_name:p.screen||null,start_date:p.start||null,end_date:p.end||null,injured:!!p.injured,injury_note:p.injNote||null,return_date:p.ret||null,deleted:false}});
   TD.matches.forEach(m=>{
-    R.matches[m.id]={id:m.id,team_id:tid,opp:m.opp||'',venue:m.venue||'home',location:m.location||'',comp:m.comp||'',match_date:m.date||null,match_time:m.time||null,status:m.status||'setup',periods:num(m.periods),period_mins:num(m.periodMins),on_pitch:num(m.onPitch),clock:m.clock||null,notes:m.notes||'',referee:m.referee||null,captain:m.captain||null,pins:!!m.pins,formation:m.formation||null,rec_mode:m.recMode||null,created_at_ms:m.createdAt||null,finished_at_ms:m.finishedAt||null,deleted:false};
+    R.matches[m.id]={id:m.id,team_id:tid,opp:m.opp||'',venue:m.venue||'home',location:m.location||'',comp:m.comp||'',match_date:m.date||null,match_time:m.time||null,status:m.status||'setup',periods:num(m.periods),period_mins:num(m.periodMins),on_pitch:num(m.onPitch),clock:m.clock||null,notes:m.notes||'',referee:m.referee||null,attendance:m.attendance>0?Math.round(m.attendance):null,captain:m.captain||null,pins:!!m.pins,formation:m.formation||null,rec_mode:m.recMode||null,created_at_ms:m.createdAt||null,finished_at_ms:m.finishedAt||null,deleted:false};
     for(const pid in m.squad){const r=m.squad[pid];R.match_squad[m.id+'|'+pid]={match_id:m.id,player_id:pid,team_id:tid,role:r.role,reason:r.reason||null,pos:r.pos||null,deleted:false}}
     m.events.forEach(e=>{R.match_events[e.id]={id:e.id,team_id:tid,match_id:m.id,seq:0,type:e.t,player_id:e.playerId||null,assist_id:e.assistId||null,off_id:e.offId||null,on_id:e.onId||null,how:e.how||null,detail:e.detail||null,reason:e.reason||null,opp_num:e.oppNum===undefined||e.oppNum===''||e.oppNum===null?null:String(e.oppNum),opp_name:e.oppName||null,note_text:e.t==='period'?(e.label||null):(e.text||null),period:num(e.period),minute:num(e.minute),ts:e.ts||null,x:num(e.x),y:num(e.y),ax:num(e.ax),ay:num(e.ay),deleted:false}});
   });
@@ -2213,7 +2221,7 @@ function applyRows(tb,rows,TD){
       case 'matches':{
         if(del){TD.matches=TD.matches.filter(x=>x.id!==r.id);if(TD.activeId===r.id)TD.activeId=null;break}
         let m=TD.matches.find(x=>x.id===r.id);if(!m){m={id:r.id,squad:{},events:[]};TD.matches.push(m)}
-        Object.assign(m,{opp:r.opp||'',venue:r.venue||'home',location:r.location||'',comp:r.comp||'',date:r.match_date||'',time:r.match_time||'',status:r.status,periods:r.periods,periodMins:r.period_mins,onPitch:r.on_pitch,clock:r.clock||{period:1,state:'ready',startedAt:null,accMs:0},notes:r.notes||'',referee:r.referee||'',captain:r.captain||'',pins:!!r.pins,formation:r.formation||'',recMode:r.rec_mode||undefined,createdAt:r.created_at_ms||0,finishedAt:r.finished_at_ms||undefined});break}
+        Object.assign(m,{opp:r.opp||'',venue:r.venue||'home',location:r.location||'',comp:r.comp||'',date:r.match_date||'',time:r.match_time||'',status:r.status,periods:r.periods,periodMins:r.period_mins,onPitch:r.on_pitch,clock:r.clock||{period:1,state:'ready',startedAt:null,accMs:0},notes:r.notes||'',referee:r.referee||'',attendance:r.attendance||0,captain:r.captain||'',pins:!!r.pins,formation:r.formation||'',recMode:r.rec_mode||undefined,createdAt:r.created_at_ms||0,finishedAt:r.finished_at_ms||undefined});break}
       case 'match_squad':{
         const m=TD.matches.find(x=>x.id===r.match_id);if(!m)break;
         if(del)delete m.squad[r.player_id];else m.squad[r.player_id]={role:r.role,reason:r.reason||'',pos:r.pos||''};break}
@@ -2784,12 +2792,12 @@ function actExtra(a,ds,el){
     case 'pinOwn':{const m=pinM();pinSave(m,pinEv(m,V.sheet.d.id),34,60);return true}
     case 'pinPos':{const m=pinM();const e=pinEv(m,V.sheet.d.id);const pid=V.sheet.d.step==='assist'?e.assistId:e.playerId;const xy=POSITIONS[posMap(m)[pid]];if(xy){const X=xy[0]/100*PW,Y=xy[1]/100*105;if(Y>PH)pinSave(m,e,34,60);else pinSave(m,e,+X.toFixed(1),+Y.toFixed(1))}return true}
     case 'pinSkip':{const m=pinM();pinNext(m,pinEv(m,V.sheet.d.id));return true}
-    case 'mdetOpen':{const m=logMatch();if(!m)return true;V.sheet={kind:'mdet',d:{id:m.id,opp:m.opp||'',venue:m.venue||'home',location:m.location||'',comp:m.comp||'',referee:m.referee||'',date:m.date||'',time:m.time||'',periods:m.periods,periodMins:m.periodMins}};renderSheet();return true}
+    case 'mdetOpen':{const m=logMatch();if(!m)return true;V.sheet={kind:'mdet',d:{id:m.id,opp:m.opp||'',venue:m.venue||'home',location:m.location||'',comp:m.comp||'',referee:m.referee||'',attendance:m.attendance||'',date:m.date||'',time:m.time||'',periods:m.periods,periodMins:m.periodMins}};renderSheet();return true}
     case 'mdetVenue':{V.sheet.d.venue=ds.v;renderSheet();return true}
     case 'mdetSave':{const d=V.sheet.d;const m=S.matches.find(x=>x.id===d.id);if(!m)return true;
       if(!String(d.opp||'').trim()){d.err='Enter the opposition.';renderSheet();return true}
       const pr=+d.periods,pm=+d.periodMins;if(!(pr>=1&&pr<=4)||!(pm>=1&&pm<=120)){d.err='Periods 1 to 4, and 1 to 120 mins each.';renderSheet();return true}
-      Object.assign(m,{opp:d.opp.trim(),venue:d.venue,location:(d.location||'').trim(),comp:(d.comp||'').trim(),referee:(d.referee||'').trim(),date:d.date||m.date,time:d.time||'',periods:pr,periodMins:pm});
+      Object.assign(m,{opp:d.opp.trim(),venue:d.venue,location:(d.location||'').trim(),comp:(d.comp||'').trim(),referee:(d.referee||'').trim(),attendance:Math.max(0,Math.round(+d.attendance||0)),date:d.date||m.date,time:d.time||'',periods:pr,periodMins:pm});
       save();V.sheet={kind:'log'};render();return true}
     case 'pinEdit':V.sheet={kind:'where',d:{id:ds.id,step:'main',fromLog:true}};renderSheet();return true;
     case 'pinsSet':{const m=M();m.pins=ds.v==='on';DB.prefs.pins=m.pins;save();render();return true}
