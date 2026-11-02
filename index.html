@@ -1343,7 +1343,7 @@ function shotMapHtml(evs,pid){
   const asLoc=evs.filter(e=>isGF(e)&&e.ax!=null&&e.ay!=null&&(!pid||e.assistId===pid));
   const lines=asLoc.filter(e=>e.ay<=PH&&e.x!=null&&e.y<=PH),asOwn=asLoc.filter(e=>e.ay>PH).length;
   const nol=evs.filter(e=>(e.t==='shot'||isGF(e))&&e.x==null&&(!pid||e.playerId===pid)).length;
-  if(!loc.length&&!own&&!asLoc.length&&!nol)return '';
+  if(!loc.length&&!own&&!asLoc.length)return '';
   const zc={};loc.forEach(e=>{const z=zoneOf(e.x,e.y).name;(zc[z]=zc[z]||{s:0,g:0}).s++;if(isGF(e))zc[z].g++});
   const zr=Object.entries(zc).sort((a,b)=>b[1].s-a[1].s).map(([z,v])=>`<tr><td class="nm">${esc(z)}</td><td>${v.s}</td><td>${v.g}</td></tr>`).join('');
   const goals=loc.filter(isGF).length;
