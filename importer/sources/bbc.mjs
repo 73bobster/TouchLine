@@ -23,8 +23,8 @@ function decode(s) {
     .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)));
 }
 
-export function htmlToLines(html) {
-  const main = html.match(/<main[\s\S]*?<\/main>/i);
+export function htmlToLines(html, whole = false) {
+  const main = whole ? null : html.match(/<main[\s\S]*?<\/main>/i);
   const body = (main ? main[0] : html)
     .replace(/<script[\s\S]*?<\/script>/gi, '')
     .replace(/<style[\s\S]*?<\/style>/gi, '')

@@ -128,3 +128,34 @@ test('detail rows are written as a replace-per-match transaction', () => {
   assert.equal((sql.match(/insert into public\.pro_match_events/g) || []).length, 9); // 4 goals, 2 yellow, 1 red, 2 subs
   assert.match(sql, /yellow, red\) values[^;]*array\[72\]::int\[\]/);
 });
+
+// Formats seen on real pages: penalties, own goals, stoppage time, reds under Key Events, line-up block repeated.
+test('match page: penalty, own goal, stoppage time and repeated blocks', () => {
+  const block = (cards) => `<div><span>home team,</span><span>Aberdeen</span><span>Manager:</span><span>M One</span><span>Formation:</span><span>4 - 4 - 2</span>
+<h4>Starting lineup</h4><ul>${pl(1, 'Keeper', 'Goalkeeper', 'A. Keeper')}${pl(4, 'Findlay', 'Defender', 'S. Findlay', cards)}</ul><h4>Substitutes</h4><ul>${pl(12, 'Bench', 'Substitute', 'B. Bench')}</ul></div>
+<div><span>away team,</span><span>Hearts</span><span>Manager:</span><span>M Two</span><span>Formation:</span><span>4 - 2 - 3 - 1</span>
+<h4>Starting lineup</h4><ul>${pl(9, 'Nisbet', 'Striker', 'K. Nisbet')}${pl(5, 'Fernandez', 'Defender', 'E. Fernandez')}</ul><h4>Substitutes</h4><ul></ul></div>`;
+  const stoppageRed = `<span>90&#x27;+3</span><span>, Red Card at 90 minutes plus 3</span>`;
+  const html = `<html><body><header><div><span>Venue:</span>Pittodrie</div><div><span>Attendance:</span>20,001</div></header><main>
+<h3>Key Events</h3>
+<div><div><h4>Aberdeen</h4></div><ul><li><span>E. Fernandez</span> <span><span>(13&#x27; og)</span></span><span>Own Goal 13 minutes</span></li><li><span>S. Findlay</span> <span><span>( 90&#x27;+3)</span></span><span>Red Card 90 minutes plus 3</span></li></ul></div>
+<div><div><h4>Hearts</h4></div><ul><li><span>K. Nisbet</span> <span><span>(90&#x27;+5 pen)</span></span><span>Penalty 90 minutes plus 5</span></li></ul></div>
+<div><div><div>Assists</div><div><span>Aberdeen,</span>B. Bench (13&#x27;)</div></div></div><hr>
+${block('')}${block(stoppageRed)}${block(stoppageRed)}
+</main></body></html>`;
+  const d = parseMatchPage(html);
+  assert.equal(d.venue, 'Pittodrie');            // header sits outside <main>
+  assert.equal(d.attendance, 20001);
+  assert.equal(d.sides.length, 2);                // repeated blocks collapse to one per side
+  assert.equal(d.sides[0].players.filter((p) => p.starter).length, 2);
+  const og = d.events.find((e) => e.type === 'own_goal');
+  assert.equal(og.minute, 13);
+  assert.equal(og.side, 'home');                  // Fernandez plays for Hearts (away), so the goal counts for Aberdeen
+  assert.equal(og.assist, 'B. Bench');
+  const pen = d.events.find((e) => e.detail === 'penalty');
+  assert.deepEqual([pen.minute, pen.side, pen.player], [95, 'away', 'K. Nisbet']);
+  const reds = d.events.filter((e) => e.type === 'red');
+  assert.equal(reds.length, 1);                   // not doubled by Key Events
+  assert.deepEqual([reds[0].minute, reds[0].side, reds[0].player], [93, 'home', 'S. Findlay']);
+  assert.equal(d.notes.length, 0);
+});
