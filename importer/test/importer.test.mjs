@@ -180,3 +180,11 @@ test('match officials in a definition list are read (referee)', () => {
   const html = '<html><body><main><div><dl><div><dt>Referee: </dt><dd>Don Robertson</dd></div><div><dt>Video Assistant Referee: </dt><dd>Matthew MacDermid</dd></div></dl></div></main></body></html>';
   assert.equal(parseMatchPage(html).referee, 'Don Robertson');
 });
+
+test('match header picks up a game missing from the month page', async () => {
+  const { parseMatchHeader, parseTeamHomeIds } = await import('../sources/bbc.mjs');
+  const html = '<main><span>Match Summary</span><div>Sun 1 Nov 2026</div><span>‧</span><div>League Cup -</div><div>Semi-finals</div><div>Heart of Midlothian 1 , Hibernian 2 at Full time</div></main>';
+  const m = parseMatchHeader(html, 'heart-of-midlothian', 'c9dr821nl8kdt');
+  assert.deepEqual([m.date, m.comp, m.home, m.away, m.homeGoals, m.awayGoals, m.status], ['2026-11-01', 'League Cup - Semi-finals', 'Heart of Midlothian', 'Hibernian', 1, 2, 'finished']);
+  assert.deepEqual(parseTeamHomeIds('<a href="/sport/football/live/abc123">x</a><a href="/sport/football/live/abc123">y</a>'), ['abc123']);
+});

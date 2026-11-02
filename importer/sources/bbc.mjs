@@ -92,6 +92,32 @@ export function parseMonth(html, ym, team) {
   return { matches: out, unknown };
 }
 
+// BBC's month pages sometimes omit a game (e.g. a cup semi-final) that the club's main page links to.
+// The match page header reads: "Sun 1 Nov 2026 ‧ League Cup - Semi-finals / Heart of Midlothian 1 , Hibernian 2 at Full time".
+const PAGE_DATE_RE = /^(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\w* (\d{1,2}) ([A-Za-z]+) (\d{4})$/;
+export function parseTeamHomeIds(html) {
+  return [...new Set([...html.matchAll(/href="[^"]*\/sport\/football\/live\/([a-z0-9]+)"/gi)].map((m) => m[1]))];
+}
+export function parseMatchHeader(html, team, pageId) {
+  const lines = htmlToLines(html, true);
+  const di = lines.findIndex((l) => PAGE_DATE_RE.test(l));
+  if (di < 0) return null;
+  const d = lines[di].match(PAGE_DATE_RE);
+  const mi = MONTHS.findIndex((x) => x.startsWith(d[2].toLowerCase().slice(0, 3)));
+  if (mi < 0) return null;
+  const ri = lines.findIndex((l, i) => i > di && i < di + 8 && RESULT_RE.test(l));
+  if (ri < 0) return null;
+  const r = lines[ri].match(RESULT_RE);
+  const comp = lines.slice(di + 1, ri).filter((l) => l !== '\u2027').join(' ').replace(/\s+-\s+/g, ' - ').replace(/\s*-$/, '').trim() || null;
+  return { team, comp, date: `${d[3]}-${String(mi + 1).padStart(2, '0')}-${String(d[1]).padStart(2, '0')}`, kickoff: null, home: r[1], away: r[3], homeGoals: +r[2], awayGoals: +r[4], status: statusOf(r[5]), rawStatus: r[5], pageId };
+}
+
+async function get(url) {
+  const res = await fetch(url, { headers: { 'User-Agent': 'touchline-poc/0.1 (hobby project; hourly at most)', 'Accept-Language': 'en-GB' } });
+  if (!res.ok) throw new Error(`BBC ${url}: HTTP ${res.status}`);
+  return res.text();
+}
+
 export async function listMatches({ team, months }) {
   const all = [];
   for (const ym of months) {
@@ -103,5 +129,19 @@ export async function listMatches({ team, months }) {
     all.push(...matches);
     await new Promise((r) => setTimeout(r, 1500)); // be polite: one page every 1.5s
   }
+  // Games the club's main page links to but the month pages left out.
+  try {
+    const known = new Set(all.map((m) => m.pageId).filter(Boolean));
+    const first = `${months[0]}-01`, last = `${months[months.length - 1]}-31`;
+    const ids = parseTeamHomeIds(await get(`https://www.bbc.co.uk/sport/football/teams/${team}`)).filter((id) => !known.has(id));
+    for (const id of ids.slice(0, 12)) {
+      await new Promise((r) => setTimeout(r, 1500));
+      const m = parseMatchHeader(await get(`https://www.bbc.co.uk/sport/football/live/${id}`), team, id);
+      if (m && m.date >= first && m.date <= last && !all.some((x) => x.date === m.date && x.home === m.home && x.away === m.away)) {
+        console.warn(`BBC ${team}: picked up ${m.date} ${m.home} v ${m.away} from the club page (missing from the month page)`);
+        all.push(m);
+      }
+    }
+  } catch (e) { console.warn(`BBC ${team}: club page check failed: ${e.message}`); }
   return all;
 }
