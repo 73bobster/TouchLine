@@ -115,7 +115,13 @@ function lineups(lines, notes) {
       continue;
     }
     const lm = l.match(SUBLONG_RE);
-    if (lm) { player.replacedBy = lm[1]; player.offMin = +lm[2] + (lm[3] ? +lm[3] : 0); continue; }
+    if (lm) {
+      const min = +lm[2] + (lm[3] ? +lm[3] : 0);
+      // A second "substituted for" under the same player is a chain: the replacement was himself replaced.
+      if (player.replacedBy) (player.chain = player.chain || []).push({ by: lm[1], min });
+      else { player.replacedBy = lm[1]; player.offMin = min; }
+      continue;
+    }
     const on = l.match(SUBON_RE);
     if (on && lines[i + 1] && SUBLONG_RE.test(lines[i + 1])) continue; // read from the long form on the next line
     const cmn = l.match(CARDMIN_RE);
@@ -141,7 +147,13 @@ function pairSubs(sides, notes) {
   for (const s of sides) {
     for (const off of s.players.filter((p) => p.replacedBy)) {
       const on = s.players.find((p) => !p.starter && p.name === off.replacedBy) || s.players.find((p) => p.name === off.replacedBy && p !== off);
-      if (on) { on.onMin = off.offMin; on.replaced = off.name; } else notes.push(`replacement not on the bench list: ${off.replacedBy}`);
+      if (on) { on.onMin = off.offMin; on.replaced = off.name; } else { notes.push(`replacement not on the bench list: ${off.replacedBy}`); continue; }
+      let prev = on;
+      for (const step of off.chain || []) {
+        prev.replacedBy = step.by; prev.offMin = step.min;
+        const next = s.players.find((p) => !p.starter && p.name === step.by);
+        if (next) { next.onMin = step.min; next.replaced = prev.name; prev = next; } else { notes.push(`replacement not on the bench list: ${step.by}`); break; }
+      }
     }
   }
 }

@@ -188,3 +188,23 @@ test('match header picks up a game missing from the month page', async () => {
   assert.deepEqual([m.date, m.comp, m.home, m.away, m.homeGoals, m.awayGoals, m.status], ['2026-11-01', 'League Cup - Semi-finals', 'Heart of Midlothian', 'Hibernian', 1, 2, 'finished']);
   assert.deepEqual(parseTeamHomeIds('<a href="/sport/football/live/abc123">x</a><a href="/sport/football/live/abc123">y</a>'), ['abc123']);
 });
+
+test('match page: a replacement who is himself replaced (substitution chain)', () => {
+  const d = (t) => `<div>${t}</div>`;
+  const html = '<main>' + [
+    'home team,', 'Hearts', 'Starting lineup',
+    'Number', '22', '22, Magnússon, Defensive Midfielder', 'T. Magnússon',
+    "Y. Dhanda 14'", ', substituted for Y. Dhanda at 14 minutes',
+    "J. Wilson 83'", ', substituted for J. Wilson at 83 minutes',
+    'Substitutes',
+    'Number', '31', '31, Dhanda, Substitute', 'Y. Dhanda',
+    'Number', '21', '21, Wilson, Substitute', 'J. Wilson',
+    'Match Officials',
+  ].map(d).join('') + '</main>';
+  const r = parseMatchPage(html);
+  const subs = r.events.filter((e) => e.type === 'sub').map((e) => `${e.minute} ${e.player}>${e.on}`);
+  assert.deepEqual(subs, ['14 T. Magnússon>Y. Dhanda', '83 Y. Dhanda>J. Wilson']);
+  const p = Object.fromEntries(r.sides[0].players.map((x) => [x.surname, x]));
+  assert.equal(p.Dhanda.onMin, 14); assert.equal(p.Dhanda.offMin, 83); assert.equal(p.Wilson.onMin, 83);
+  assert.equal(r.notes.length, 0);
+});
