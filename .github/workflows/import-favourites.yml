@@ -35,6 +35,11 @@ jobs:
       - run: node --test importer/test/importer.test.mjs
       - name: Fetch from source
         run: |
+          # Clubs followed by any team in the app (teams.pro_team); falls back to Rangers and Hearts if none or no database secret.
+          if [ -n "$NEON_DATABASE_URL" ]; then
+            FOLLOWED_TEAMS=$(psql "$NEON_DATABASE_URL" -At -c "select string_agg(distinct pro_team, ',') from public.teams where coalesce(pro_team,'') <> '' and not coalesce(deleted,false)" || true)
+            export FOLLOWED_TEAMS
+          fi
           if [ "${{ github.event_name }}" = "schedule" ]; then
             node importer/import.mjs --source bbc --details recent --sql importer/out/upsert.sql
           else

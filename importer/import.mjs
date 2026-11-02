@@ -120,7 +120,8 @@ async function main() {
   }
   const sourceId = args.source || 'bbc';
   const source = await import(`./sources/${sourceId}.mjs`);
-  const teams = String(args.teams || 'rangers,heart-of-midlothian').split(',').map((s) => s.trim()).filter(Boolean);
+  const given = String(args.teams || process.env.FOLLOWED_TEAMS || '').split(',').map((s) => s.trim()).filter(Boolean);
+  const teams = given.length ? [...new Set(given)] : ['rangers', 'heart-of-midlothian'];
   const now = new Date();
   const ym = (d) => `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
   const from = args.from || ym(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1)));
@@ -131,7 +132,8 @@ async function main() {
   note(`teams: ${teams.join(', ')}; months: ${months.join(', ')}`);
   const all = [];
   for (const team of teams) {
-    const list = await source.listMatches({ team, months });
+    let list;
+    try { list = await source.listMatches({ team, months }); } catch (e) { note(`${team}: skipped (${e.message})`); continue; }
     note(`${team}: ${list.length} match(es), ${list.filter((m) => m.status === 'finished').length} finished`);
     all.push(...list);
   }
