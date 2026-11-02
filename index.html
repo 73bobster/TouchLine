@@ -77,7 +77,7 @@ button[disabled]{opacity:.45}
 .clockbar{text-align:center;padding:10px 0 6px}
 .clock{font-size:56px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1.1}
 .pname{font-size:14px;font-weight:700;color:var(--mute);text-transform:uppercase;letter-spacing:.08em}
-.evg{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin:12px 0}
+.evg{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin:8px 0;grid-auto-rows:1fr;height:var(--evh,auto)}
 .evg button{min-height:74px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;background:#fff;border:2px solid var(--line);font-weight:700;font-size:14px;border-radius:14px}
 .evg button i{font-style:normal;font-size:24px}
 .evg button.big{min-height:92px;font-size:16px}
@@ -332,7 +332,7 @@ header.top.live .sb .tm{font-size:14px;gap:6px}
 .ctlbar .cb .btn{min-height:42px;padding:0 12px;font-size:14px}
 .btn.againstbtn{background:#d32f2f;border:2px solid #d32f2f;color:#fff}
 main.lvm{padding-top:4px}
-.pw .pitch{height:clamp(280px,calc(100dvh - 450px),640px)}
+.pw .pitch{height:var(--pwh,clamp(280px,calc(100dvh - 450px),640px))}
 .tray{grid-template-columns:repeat(5,1fr);gap:5px}
 .tray .dz{min-height:46px;font-size:10px}.tray .dz i{font-size:17px}
 .tray.t2{grid-template-columns:1fr 1fr}
@@ -341,8 +341,8 @@ main.lvm{padding-top:4px}
 .d2 .bench{max-height:128px}
 .d2{--d2h:clamp(280px,calc(100dvh - 365px),700px);display:grid;grid-template-columns:minmax(0,1fr) 76px;gap:6px;margin:4px 0 6px}
 .d2 .pitch{height:min(var(--d2h),calc((100vw - 110px)*1.75))}
-.d2{--d2h:min(clamp(280px,calc(100dvh - 375px),700px),calc((100vw - 110px)*1.85))}
-.d2 .pitch{height:auto!important;align-self:stretch;min-height:280px}
+.d2{--d2h:min(var(--d2js,clamp(280px,calc(100dvh - 375px),700px)),calc((100vw - 110px)*1.85))}
+.d2 .pitch{height:auto!important;align-self:stretch;min-height:200px}
 .d2 .acts{height:var(--d2h);align-self:start}
 .d2 .bench{grid-column:1/-1;margin:0;min-height:62px}
 .d2 .bench .bl{writing-mode:vertical-rl;transform:rotate(180deg)}
@@ -437,7 +437,7 @@ main.lvm{padding-top:4px}
 .smap .pl{position:absolute;inset:0;width:100%;height:100%}
 .smap .ln{position:absolute;inset:0;width:100%;height:100%}.smap .ln line{stroke:#fff;stroke-width:1.5;stroke-dasharray:4 3}
 .sd{position:absolute;width:14px;height:14px;border-radius:50%;transform:translate(-50%,-50%);border:2px solid #fff;box-sizing:border-box;display:inline-block}
-.sd.goal{background:#ffd400;border-color:#111;width:18px;height:18px}.sd.on{background:#2b7cff}.sd.off{background:transparent}.sd.blk{background:#888}.sd.post{background:#ff8a00}
+.sd.goal{background:#ff2d55;border-color:#fff;width:20px;height:20px;box-shadow:0 0 0 2px #111}.sd.on{background:#2b7cff}.sd.off{background:transparent}.sd.blk{background:#888}.sd.post{background:#ff8a00}
 .leg{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:11px;margin-top:6px;align-items:center}.leg span{display:flex;align-items:center;gap:4px}.leg .sd{position:static;transform:none;width:12px;height:12px;box-shadow:0 0 0 1px #888}
 
 /* whiteboard */
@@ -979,6 +979,7 @@ function benchTokens(m,drag){
   const b=matchBadges(m),gm=gmMap(m),hurt=hurtSet(m);
   return benchIds(m).map(id=>tokenHtml(id,{drag,where:'bench',drop:drag,act:'tapBench',inj:P(id).injured||hurt.has(id),cap:m.captain===id,mins:gm[id],goals:b.goals[id],yel:b.yel[id]})).join('');
 }
+const row2Html=()=>`<div class="row2"><button class="btn sec notebtn" data-act="ev" data-k="team">📊 Team stats</button><button class="btn sec notebtn" data-act="ev" data-k="note">📝 Note</button><button class="btn sec notebtn" data-act="balance">⚖️ Balance time</button></div>`;
 function pitchBlock(m){
   const bt=benchTokens(m,false);
   return `<div class="pitchwrap pw">${pitchEl(liveTokens(m,false),{})}</div>
@@ -1219,6 +1220,29 @@ function formStrip(ms){
   const sq=ms.slice().reverse().map(m=>{const x=score(m);const r=x.us>x.them?'w':x.us===x.them?'d':'l';return `<i class="${r}" title="${esc(m.opp||'')} ${x.us}-${x.them}">${r.toUpperCase()}</i>`}).join('');
   return `<div class="formstrip" aria-label="Recent results, oldest first">${sq}</div>`;
 }
+/* size the pitch / buttons so the whole live screen, down to the last line, fits above the tab bar */
+function fitLive(){
+  const tb=document.querySelector('.tabs');let tabH=0;
+  if(tb){const r=tb.getBoundingClientRect();if(r.top>innerHeight/2)tabH=innerHeight-r.top}
+  const set=(host,name,last,min,max,sz)=>{
+    if(!host||!last)return;
+    let size=(sz||host).getBoundingClientRect().height||min;
+    for(let i=0;i<4;i++){
+      const over=last.getBoundingClientRect().bottom-(innerHeight-tabH-6);
+      if(Math.abs(over)<2)break;
+      size=Math.max(min,Math.min(max,size-over));
+      host.style.setProperty(name,Math.round(size)+'px');
+    }
+  };
+  const d2=document.querySelector('.d2');
+  if(d2){d2.style.removeProperty('--d2js');const h=document.querySelector('.hint');set(d2,'--d2js',h,200,Math.min(760,(d2.clientWidth-80)*1.85),d2.querySelector('.acts'))}
+  const pw=document.querySelector('.pw');
+  if(pw){pw.style.removeProperty('--pwh');const h=document.querySelector('.hint');set(pw,'--pwh',h,200,Math.min(760,pw.clientWidth*1.6),pw.querySelector('.pitch'))}
+  const ev=document.querySelector('.evg');
+  if(ev){ev.style.removeProperty('--evh');const r2=document.querySelector('.row2');set(ev,'--evh',r2,230,780)}
+}
+window.addEventListener('resize',()=>{fitLive()});
+window.addEventListener('orientationchange',()=>setTimeout(fitLive,200));
 function fitClock(c){const n=c.textContent.length;c.style.fontSize=n>5?Math.max(15,Math.floor(30*5.3/n))+'px':''}
 function fitForm(){
   document.querySelectorAll('.formstrip').forEach(el=>{
@@ -1269,7 +1293,7 @@ function shotMapHtml(evs,pid){
   const goals=loc.filter(isGF).length;
   return `<div class="smap">${PIN_LINES}<svg class="ln" viewBox="0 0 68 52.5" preserveAspectRatio="none">${lines.map(e=>`<line x1="${e.ax}" y1="${e.ay}" x2="${e.x}" y2="${e.y}" vector-effect="non-scaling-stroke"/>`).join('')}</svg>${loc.map(e=>`<span class="sd ${isGF(e)?'goal':SHOT_CLS[e.detail]||'off'}" style="${pct(e.x,e.y)}"></span>`).join('')}</div>
   <div class="leg"><span><i class="sd goal"></i>Goal</span><span><i class="sd on"></i>On target</span><span><i class="sd off"></i>Off target</span><span><i class="sd blk"></i>Blocked</span><span><i class="sd post"></i>Post</span><span>- - Assist</span></div>
-  <div class="note" style="margin-top:6px">${loc.length} shot${loc.length===1?'':'s'} pinned in their half (${goals} goal${goals===1?'':'s'})${own?`, ${own} from your own half`:''}${asOwn?`, ${asOwn} assist${asOwn===1?'':'s'} from deep`:''}.</div>
+  <div class="note" style="margin-top:6px">${loc.length} shot${loc.length===1?'':'s'} pinned in their half (${goals} goal${goals===1?'':'s'})${own?`, ${own} from your own half`:''}${(()=>{const n=evs.filter(e=>isGF(e)&&e.x==null&&(!pid||e.playerId===pid)).length;return n?`. ${n} goal${n===1?'':'s'} had no location pinned`:''})()}${asOwn?`, ${asOwn} assist${asOwn===1?'':'s'} from deep`:''}.</div>
   ${zr?`<div class="tblwrap"><table class="lt"><thead><tr><th class="nm">Zone</th><th>Shots</th><th>Goals</th></tr></thead><tbody>${zr}</tbody></table></div>`:''}`;
 }
 
@@ -1408,7 +1432,7 @@ async function wbShare(){
   img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(xml);
 }
 /* ---------- recording format bar (bottom of the screen) ---------- */
-const REC_MODES=[['buttons','Buttons','Big buttons, no pitch'],['drag','Drag','Drag players onto actions, or tap a player or an action'],['tap','Tap','Tap players on the pitch']];
+const REC_MODES=[['buttons','Buttons','Big buttons, no pitch'],['drag','Drag/Tap','Drag players onto actions, or tap a player or an action'],['tap','Tap','Tap players on the pitch']];
 function modeBar(){
   const m=M();
   if(V.tab!=='match'||!m||m.status!=='live'||!canEdit()||V.newTeam)return '';
@@ -1466,13 +1490,13 @@ function liveView(m,ro){
   }
   const stText={ready:'Ready',running:'Playing',paused:'Stopped',break:(m.periods===2?'Half time':'Break'),full:'Full time'}[st];
   const pn=st==='break'||st==='full'||st==='ready'?`<span id="stt">${stText}</span>`:st==='running'?`<span id="stt">${esc(pname(m,Math.min(c.period,m.periods)))}</span>`:`${esc(pname(m,Math.min(c.period,m.periods)))} · <span id="stt">${stText}</span>`;
-  const evg=`<div class="evg">${EVBTN.map(b=>b.k==='balance'?`<button data-act="balance"><i>${b.i}</i>${b.l}</button>`:`<button class="${b.c||''}" data-act="ev" data-k="${b.k}"><i>${b.i}</i>${b.l}</button>`).join('')}</div>`;
+  const evg=`<div class="evg">${EVBTN.filter(b=>!['team','note','balance'].includes(b.k)).map(b=>`<button class="${b.c||''}" data-act="ev" data-k="${b.k}"><i>${b.i}</i>${b.l}</button>`).join('')}</div>`;
   return `<header class="top live"><div class="sb"><div class="tm">${crest(S.team,24)}<span>${esc(S.team.name)}</span></div><div class="score" id="score">${sc.us} – ${sc.them}</div><div class="tm r"><span>${esc(m.opp)}</span></div></div></header>
   <main class="lvm">
   ${ro?`<div class="note" style="margin-top:0;text-align:center">Watching live · view only${SYNC.state==='offline'?' · offline, may be behind':''}</div>`:''}
   <div class="ctlbar"><div class="ck"><div class="clock" id="clock">${fmtClock(m)}</div><div class="pname">${pn}</div></div><div class="cb">${ctl}</div></div>
   <div class="lv"><div class="lv-a">
-  ${ro?'':(rm==='drag'?d2Block(m):pit?pitchBlock(m):evg)}
+  ${ro?'':(rm==='drag'?d2Block(m):pit?pitchBlock(m):evg+row2Html())}
   </div><div class="lv-b">
   <h2 style="margin-top:6px">Latest</h2>
   <div class="card" style="padding:4px 14px">${recent.length?recent.map(e=>`<div class="log"><div class="mn">${fmtMin(e,m)}</div><div class="tx">${describe(e,m)}</div></div>`).join(''):'<div class="empty" style="padding:14px">Nothing recorded yet</div>'}</div>
@@ -1588,7 +1612,7 @@ function renderSheet(){
       html=sheetWrap('Note',`<label>What happened?<textarea data-sbind="text" placeholder="e.g. great save from a corner, ref gave a late penalty…">${esc(d.text||'')}</textarea></label><button class="btn block lg" data-act="noteSave">Save note</button>`);break;
     case 'log':{
       const mm=logMatch();const ev=sortedEvents(mm).slice().reverse();const ed=canEdit();
-      html=sheetWrap('Match log',(ed?`<button class="btn block" data-act="evNew" style="margin-bottom:10px">＋ Add an event</button>`:'')+(ev.length?ev.map(e=>`<div class="log"><div class="mn">${fmtMin(e,mm)}</div><div class="tx">${describe(e,mm)}</div>${ed?`<button data-act="evEdit" data-id="${e.id}" aria-label="Edit">✎</button><button data-act="evDel" data-id="${e.id}" aria-label="Delete">🗑</button>`:''}</div>`).join(''):'<div class="empty">Nothing recorded yet</div>'));
+      html=sheetWrap('Match log',(ed?`<button class="btn block" data-act="evNew" style="margin-bottom:10px">＋ Add an event</button>`:'')+(ev.length?ev.map(e=>`<div class="log"><div class="mn">${fmtMin(e,mm)}</div><div class="tx">${describe(e,mm)}</div>${ed?`<button data-act="evEdit" data-id="${e.id}" aria-label="Edit">✎</button><button data-act="evDel" data-id="${e.id}" aria-label="Delete">🗑</button>`:''}</div>`).join(''):'<div class="empty">Nothing recorded yet</div>')+(ed?`<button class="btn bad block" data-act="delMatchAsk" style="margin-top:14px">🗑 Delete this match</button>`:''));
       break}
     case 'evMin':
       html=sheetWrap('Change minute',`<label>Minute<input type="number" inputmode="numeric" class="big-in" data-sbind="minute" value="${esc(d.minute)}"></label><button class="btn block lg" data-act="evMinSave">Save</button>`);break;
@@ -1724,6 +1748,7 @@ const CONFIRMS={
     save();V.sheet=null;render()},
   finishEarly(){const m=M();freeze(m);logPeriod(m,'Match ended early');m.clock.state='full';save();V.sheet=null;render()},
   wbClear(){const w=wbState();w.tokens=[];w.strokes=[];wbSave();V.sheet=null;renderSheet();wbDraw()},
+  delMatch(id){const m=S.matches.find(x=>x.id===id);if(!m)return;S.matches=S.matches.filter(x=>x.id!==id);if(S.activeId===id)S.activeId=null;if(V.matchId===id)V.matchId=null;if(V.logId===id)V.logId=null;save();V.sheet=null;toast('Match deleted');render()},
   cancelMatch(){const m=M();S.matches=S.matches.filter(x=>x.id!==m.id);S.activeId=null;save();V.sheet=null;V.err='';render()},
   playerRemove(id){const p=P(id);if(p){p.left=true;if(!p.end)p.end=todayStr()}save();V.sheet=null;render()},
   reset(){DB=blankDB();DB.user={id:'local',email:'',name:'You',isSuper:true};S=EMPTY();V.tab='match';V.matchId=null;V.draft={name:'',age:'',ground:'',primary:'#0b6b3a',secondary:'#ffffff',onPitch:11,periods:2,periodMins:45};save();V.sheet=null;render()}
@@ -1774,7 +1799,7 @@ function act(a,ds,el){
   const m=M();
   if(actExtra(a,ds,el))return;
   switch(a){
-    case 'tab':V.ts=null;V.tab=ds.tab;V.matchId=null;V.sheet=null;V.sess=null;V.newTeam=false;break;
+    case 'tab':V.top=1;V.ts=null;V.tab=ds.tab;V.matchId=null;V.sheet=null;V.sess=null;V.newTeam=false;break;
     case 'createTeam':{
       const t=V.draft;if(!t.name.trim()){V.err='Give your team a name first.';break}
       V.err='';S.team=Object.assign({},t,{name:t.name.trim()});save();V.tab='squad';break}
@@ -2647,7 +2672,7 @@ function sheetExtra(s,m,d){
 }
 
 /* ---------- extra actions ---------- */
-const EDIT_ACTS=new Set(['playerNew','playerEdit','playerRestore','playerSave','playerRemove','importOpen','importParse','importAdd','importBack','importDel','matchNew','venue','matchNext','backDetails','cancelMatch','role','reason','restSub','toLive','editLineup','ko','pause','resume','endPeriod','nextPeriod','finishEarly','finish','ev','pick','oppSave','noteSave','evNew','evEdit','evSave','evDel','attSet','attAll','attMins','attEarly','attReason','sessNew','sessEdit','sessSave','sessDel','recMode','recDefault','pinAt','pinOwn','pinPos','pinSkip','pinEdit','pinsSet','pinsDefault','teamTap','capPick','capSet','capSkip','tapPlayer','tapBench','tapDo','tapOn','preset','fmt','prefill','formPick','luSel','luPitch','luPut','luList','injPick']);
+const EDIT_ACTS=new Set(['delMatchAsk','playerNew','playerEdit','playerRestore','playerSave','playerRemove','importOpen','importParse','importAdd','importBack','importDel','matchNew','venue','matchNext','backDetails','cancelMatch','role','reason','restSub','toLive','editLineup','ko','pause','resume','endPeriod','nextPeriod','finishEarly','finish','ev','pick','oppSave','noteSave','evNew','evEdit','evSave','evDel','attSet','attAll','attMins','attEarly','attReason','sessNew','sessEdit','sessSave','sessDel','recMode','recDefault','pinAt','pinOwn','pinPos','pinSkip','pinEdit','pinsSet','pinsDefault','teamTap','capPick','capSet','capSkip','tapPlayer','tapBench','tapDo','tapOn','preset','fmt','prefill','formPick','luSel','luPitch','luPut','luList','injPick']);
 function genCode(){const A='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';const b=new Uint8Array(8);(window.crypto||{getRandomValues:a=>{for(let i=0;i<a.length;i++)a[i]=Math.random()*256}}).getRandomValues(b);return Array.from(b,x=>A[x%A.length]).join('')}
 async function syncWait(){for(let i=0;i<30&&SYNC.busy;i++)await new Promise(r=>setTimeout(r,300));SYNC.state='idle';await syncNow(true)}
 async function refreshMembers(){
@@ -2787,6 +2812,7 @@ function actExtra(a,ds,el){
     case 'attReason':{const r=S.sessions.find(q=>q.id===V.sess).records[ds.id];r.reason=r.reason===ds.val?'':ds.val;save();render();return true}
 
     /* log editing */
+    case 'delMatchAsk':{const m=logMatch();if(!m)return true;ask({title:'Delete this match?',msg:'vs '+(m.opp||'opponent')+' on '+(m.date||'')+'. The score, lineup, every event and the stats from it will be removed for good. This cannot be undone.',ok:'Delete match',cancel:'Keep it',danger:true,fn:'delMatch',arg:m.id});return true}
     case 'logOpen':V.logId=ds.id||null;V.sheet={kind:'log'};renderSheet();return true;
     case 'evNew':{const mm=logMatch();const per=mm.clock&&mm.clock.state!=='ready'?Math.min(mm.clock.period,mm.periods):1;V.sheet={kind:'evEdit',d:{isNew:true,t:'goal',period:per,minute:'',how:'',playerId:'',assistId:''},err:''};renderSheet();return true}
     case 'evEdit':{const mm=logMatch();const e=mm.events.find(x=>x.id===ds.id);if(!e)return true;
@@ -2833,9 +2859,17 @@ function render(){
   renderSheet();
   fitForm();
   const ck=$('#clock');if(ck)fitClock(ck);
+  fitLive();
+  if(V.top){V.top=0;window.scrollTo(0,0)}
 }
 
+function capClock(m){
+  const c=m&&m.clock;if(!c||c.state!=='running'||!canEdit())return;
+  const cap=m.periodMins*60000*1.5;
+  if(elapsedMs(m)>cap){c.accMs=cap;c.startedAt=null;c.state='paused';save();toast('Clock paused: this period is 50% over its length. Resume it if play is still going.');render()}
+}
 setInterval(()=>{
+  try{capClock(M())}catch(e){}
   const m=M()||(!canEdit()&&liveOther());if(!m||m.status!=='live'||V.tab!=='match')return;
   const c=$('#clock');if(c){c.textContent=fmtClock(m);fitClock(c)}
   if(++TICK%40===0){const t=$('#ptab');if(t&&!V.sheet)t.innerHTML=liveTable(m);const mp=gmMap(m);document.querySelectorAll('.gm[data-gm]').forEach(g=>{const v=mp[g.dataset.gm];if(v!==undefined)g.textContent=v+"'"})}
