@@ -1861,7 +1861,7 @@ function act(a,ds,el){
       const t=V.draft;if(!t.name.trim()){V.err='Give your team a name first.';break}
       V.err='';S.team=Object.assign({},t,{name:t.name.trim()});save();V.tab='squad';break}
     case 'preset':{const p=PRESETS[+ds.i];const t=T();t.primary=p[1];t.secondary=p[2];save();break}
-    case 'proFollow':{const t=T();t.proOn=!t.proOn;if(!t.proOn){t.proTeam='';t.proClub='';t.proName=''}else if(!t.proName){const f=clubFind(t.name);if(f){t.proName=f.name;t.proTeam=f.slug;t.proClub=f.name}}save();PRO.at=0;render();break}
+    case 'proFollow':{const t=T();t.proSeen=true;t.proOn=!t.proOn;if(!t.proOn){t.proTeam='';t.proClub='';t.proName=''}else if(!t.proName){const f=clubFind(t.name);if(f){t.proName=f.name;t.proTeam=f.slug;t.proClub=f.name}}save();PRO.at=0;render();break}
     case 'fmt':{const f=FORMATS[+ds.i];const t=T();t.onPitch=f[1];t.periods=f[2];t.periodMins=f[3];save();break}
     case 'backup':V.sheet={kind:'share',title:'Backup',note:'Copy this and keep it somewhere safe, such as a note or an email to yourself. Use Restore to bring it back.',d:{text:JSON.stringify(S)}};renderSheet();return;
     case 'restoreOpen':V.sheet={kind:'restore',d:{text:''}};renderSheet();return;
@@ -2173,7 +2173,8 @@ async function createTeamCloud(){
 function rowsFor(TD){
   const tid=TD.team.id,t=TD.team;
   const R={teams:{},players:{},matches:{},match_squad:{},match_events:{},sessions:{},attendance:{}};
-  R.teams[tid]={id:tid,name:t.name||'',age:t.age||'',ground:t.ground||'',primary_colour:t.primary||null,secondary_colour:t.secondary||null,on_pitch:num(t.onPitch),periods:num(t.periods),period_mins:num(t.periodMins),pro_team:(t.proOn&&t.proTeam)?t.proTeam:null,deleted:false};
+  R.teams[tid]={id:tid,name:t.name||'',age:t.age||'',ground:t.ground||'',primary_colour:t.primary||null,secondary_colour:t.secondary||null,on_pitch:num(t.onPitch),periods:num(t.periods),period_mins:num(t.periodMins),deleted:false};
+  if(t.proSeen)R.teams[tid].pro_team=(t.proOn&&t.proTeam)?t.proTeam:null; // only send once this device has seen the server value, so an out-of-date device never wipes it
   TD.players.forEach(p=>{R.players[p.id]={id:p.id,team_id:tid,num:num(p.num),name:p.name||'',pos:p.pos||null,left_squad:!!p.left,screen_name:p.screen||null,start_date:p.start||null,end_date:p.end||null,injured:!!p.injured,injury_note:p.injNote||null,return_date:p.ret||null,deleted:false}});
   TD.matches.forEach(m=>{
     R.matches[m.id]={id:m.id,team_id:tid,opp:m.opp||'',venue:m.venue||'home',location:m.location||'',comp:m.comp||'',match_date:m.date||null,match_time:m.time||null,status:m.status||'setup',periods:num(m.periods),period_mins:num(m.periodMins),on_pitch:num(m.onPitch),clock:m.clock||null,notes:m.notes||'',referee:m.referee||null,attendance:m.attendance>0?Math.round(m.attendance):null,captain:m.captain||null,pins:!!m.pins,formation:m.formation||null,rec_mode:m.recMode||null,created_at_ms:m.createdAt||null,finished_at_ms:m.finishedAt||null,deleted:false};
@@ -2203,7 +2204,8 @@ async function pushTeam(TD){
     const up=[];for(const k in cur){const sig=sigOf(cur[k]);if(old[k]!==sig)up.push([k,sig,cur[k]])}
     for(let i=0;i<up.length;i+=100){
       const part=up.slice(i,i+100);
-      await rest('POST','/'+tb+'?on_conflict='+PK[tb].join(','),part.map(x=>x[2]),'resolution=merge-duplicates,return=minimal');
+      const groups={};part.forEach(x=>{(groups[Object.keys(x[2]).join(',')]=groups[Object.keys(x[2]).join(',')]||[]).push(x)}); // rows with different columns go in separate requests
+      for(const g of Object.values(groups))await rest('POST','/'+tb+'?on_conflict='+PK[tb].join(','),g.map(x=>x[2]),'resolution=merge-duplicates,return=minimal');
       part.forEach(x=>{old[x[0]]=x[1]});n+=part.length;
     }
     for(const k of Object.keys(old).filter(k=>!(k in cur))){
@@ -2219,7 +2221,7 @@ function applyRows(tb,rows,TD){
   for(const r of rows){
     const del=!!r.deleted;
     switch(tb){
-      case 'teams':{const t=TD.team;Object.assign(t,{name:r.name,age:r.age||'',ground:r.ground||'',primary:r.primary_colour||t.primary,secondary:r.secondary_colour||t.secondary,onPitch:r.on_pitch||t.onPitch,periods:r.periods||t.periods,periodMins:r.period_mins||t.periodMins});{const c=r.pro_team&&UK_CLUBS.find(c=>clubSlug(c[0])===r.pro_team);t.proOn=!!c;t.proTeam=c?r.pro_team:'';t.proClub=c?c[0]:'';t.proName=c?c[0]:''}break}
+      case 'teams':{const t=TD.team;Object.assign(t,{name:r.name,age:r.age||'',ground:r.ground||'',primary:r.primary_colour||t.primary,secondary:r.secondary_colour||t.secondary,onPitch:r.on_pitch||t.onPitch,periods:r.periods||t.periods,periodMins:r.period_mins||t.periodMins});{const c=r.pro_team&&UK_CLUBS.find(c=>clubSlug(c[0])===r.pro_team);t.proSeen=true;t.proOn=!!c;t.proTeam=c?r.pro_team:'';t.proClub=c?c[0]:'';t.proName=c?c[0]:''}break}
       case 'players':{
         if(del){TD.players=TD.players.filter(x=>x.id!==r.id);break}
         let p=TD.players.find(x=>x.id===r.id);if(!p){p={id:r.id};TD.players.push(p)}
