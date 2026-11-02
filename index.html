@@ -742,7 +742,7 @@ function squadView(){
   const frow=p=>{const future=!p.left&&p.start&&p.start>todayStr();
     return `<div class="prow out"><div class="num">${esc(p.num)}</div><div class="nm">${esc(p.name)}<small>${future?'Joins '+esc(fmtD(p.start)):'Left'+(p.end?' '+esc(fmtD(p.end)):'')}${statLine(p.id)?' · '+esc(statLine(p.id)):''}</small></div>${ed?`<button class="btn sec" data-act="${future?'playerEdit':'playerRestore'}" data-id="${p.id}" style="min-width:76px;padding:0 10px">${future?'Edit':'Rejoin'}</button>`:''}</div>`};
   return header('Squad',all.length+' player'+(all.length===1?'':'s')+(inj.length?' · '+inj.length+' injured':''))+`<main>
-  ${ed?`<div class="row" style="margin-bottom:12px"><button class="btn" data-act="playerNew">+ Add player</button><button class="btn sec" data-act="importOpen">${OCR?'📷 ':''}Import list</button></div>`:`<div class="note" style="margin-top:0">View only. See the Stats tab for full numbers.</div>`}
+  ${ed?`<div class="row" style="margin-bottom:12px"><button class="btn" data-act="playerNew">+ Add player</button><button class="btn sec" data-act="importOpen">${OCR?'📷 ':''}Import list</button></div>${CLOUD&&S.team.proTeam?`<button class="btn sec block" data-act="proSquad" style="margin:-4px 0 12px" ${PRO.busy?'disabled':''}>${PRO.busy?'Reading line-up…':'Fill squad from the latest line-up'}</button>`:''}`:`<div class="note" style="margin-top:0">View only. See the Stats tab for full numbers.</div>`}
   ${fit.length?`<div class="cols">${fit.map(row).join('')}</div>`:(inj.length?'':`<div class="empty"><b>No players yet</b>${ed?'Add them one by one, or tap <b style="display:inline">Import list</b> to paste a list or photograph a team sheet.':'The coach has not added a squad yet.'}</div>`)}
   ${inj.length?`<h2>Injured (${inj.length})</h2><div class="note" style="margin-top:0">Left out of the squad by default when you pick a team. Open a player to mark them fit again.</div><div class="cols">${inj.map(row).join('')}</div>`:''}
   ${former.length?`<h2>Former players and new joiners (${former.length})</h2><div class="note" style="margin-top:0">Numbers are free to reuse. Past matches and stats keep their records.</div><div class="cols">${former.map(frow).join('')}</div>`:''}
@@ -756,6 +756,7 @@ function noMatch(){
   if(!canEdit())return header('Match',S.team.name)+`<main>${S.role==='viewer'?`<div class="banner">You can see everything in this team. To record or edit, assign yourself as a coach in the Team tab.</div>`:''}<div class="empty"><b>No match in progress</b>When the coach starts a match you can follow it here.</div>${last?`<h2>Last result</h2>${resultCard(last)}`:''}</main>`;
   return header('Match',S.team.name)+`<main>
   ${other?`<div class="card"><b>Match in progress: v ${esc(other.opp)}</b><div class="note">Started on another device or earlier.</div><button class="btn block" data-act="continueLive" data-id="${other.id}">Continue recording</button></div>`:''}
+  ${CLOUD&&S.team.proTeam?`<div class="note" style="margin:0 0 10px">Fixtures, results and line-ups for ${esc(S.team.proClub||'this club')} fill in automatically from the feed. Record a match yourself only if you want your own detail.</div>`:''}
   ${n<2?`<div class="card"><b>Add your squad first</b><div class="note">You need players in the squad before you can pick a team.</div><button class="btn block" data-act="tab" data-tab="squad">Go to Squad</button></div>`:''}
   <button class="btn block lg" data-act="matchNew" ${n<2?'disabled':''}>+ New match</button>
   <button class="btn sec block" data-act="wbOpen" style="margin-top:10px">🧑‍🏫 Whiteboard</button>
@@ -2730,7 +2731,7 @@ function sheetExtra(s,m,d){
 }
 
 /* ---------- extra actions ---------- */
-const EDIT_ACTS=new Set(['proFollow','mdetOpen','mdetVenue','mdetSave','pinEdit','delMatchAsk','playerNew','playerEdit','playerRestore','playerSave','playerRemove','importOpen','importParse','importAdd','importBack','importDel','matchNew','venue','matchNext','backDetails','cancelMatch','role','reason','restSub','toLive','editLineup','ko','pause','resume','endPeriod','nextPeriod','finishEarly','finish','ev','pick','oppSave','noteSave','evNew','evEdit','evSave','evDel','attSet','attAll','attMins','attEarly','attReason','sessNew','sessEdit','sessSave','sessDel','recMode','recDefault','pinAt','pinOwn','pinPos','pinSkip','pinEdit','pinsSet','pinsDefault','teamTap','capPick','capSet','capSkip','tapPlayer','tapBench','tapDo','tapOn','preset','fmt','prefill','formPick','luSel','luPitch','luPut','luList','injPick']);
+const EDIT_ACTS=new Set(['proFollow','proSquad','mdetOpen','mdetVenue','mdetSave','pinEdit','delMatchAsk','playerNew','playerEdit','playerRestore','playerSave','playerRemove','importOpen','importParse','importAdd','importBack','importDel','matchNew','venue','matchNext','backDetails','cancelMatch','role','reason','restSub','toLive','editLineup','ko','pause','resume','endPeriod','nextPeriod','finishEarly','finish','ev','pick','oppSave','noteSave','evNew','evEdit','evSave','evDel','attSet','attAll','attMins','attEarly','attReason','sessNew','sessEdit','sessSave','sessDel','recMode','recDefault','pinAt','pinOwn','pinPos','pinSkip','pinEdit','pinsSet','pinsDefault','teamTap','capPick','capSet','capSkip','tapPlayer','tapBench','tapDo','tapOn','preset','fmt','prefill','formPick','luSel','luPitch','luPut','luList','injPick']);
 function genCode(){const A='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';const b=new Uint8Array(8);(window.crypto||{getRandomValues:a=>{for(let i=0;i<a.length;i++)a[i]=Math.random()*256}}).getRandomValues(b);return Array.from(b,x=>A[x%A.length]).join('')}
 async function syncWait(){for(let i=0;i<30&&SYNC.busy;i++)await new Promise(r=>setTimeout(r,300));SYNC.state='idle';await syncNow(true)}
 async function refreshMembers(){
@@ -3003,9 +3004,36 @@ function proView(){
   const m=PRO.ref&&PRO.matches.find(x=>proKey(x)===PRO.ref);
   return m?proDetailView(m):historyView();
 }
+const POSMAP=p=>{const x=String(p||'').toLowerCase();return /goalkeeper|keeper/.test(x)?'GK':/back|defend/.test(x)?'DEF':/midfield/.test(x)?'MID':/striker|forward|winger|attack(er)?$/.test(x)?'FWD':''};
+async function proFillSquad(){
+  const t=S.team;if(!t||!t.proTeam||PRO.busy)return;
+  const ck=clubKey(t.proClub);const fin=PRO.matches.filter(m=>m.status==='finished').sort((a,b)=>b.match_date.localeCompare(a.match_date));
+  if(!fin.length){toast('No games imported for this club yet. Try again after the next feed.');return}
+  PRO.busy=true;render();let got=null;
+  try{
+    for(const m of fin.slice(0,6)){
+      const home=clubKey(m.home)===ck||(ck&&clubKey(m.home).includes(ck));
+      const q='source=eq.'+encodeURIComponent(m.source)+'&source_ref=eq.'+encodeURIComponent(m.source_ref)+'&side=eq.'+(home?'home':'away');
+      const pl=await rest('GET','/pro_match_players?select=num,name,pos&'+q+'&order=num.asc');
+      if(pl&&pl.length){got=pl;break}
+    }
+  }catch(e){PRO.busy=false;render();toast('Could not read the line-up ('+e.message+').');return}
+  PRO.busy=false;
+  if(!got){render();toast('No line-ups published yet for this club.');return}
+  let n=0;const have=activePlayers();
+  got.forEach(p=>{
+    const num=+p.num,name=String(p.name||'').trim();
+    if(!name||!(num>=0&&num<=99))return;
+    if(have.some(x=>x.num===num||x.name.toLowerCase()===name.toLowerCase()))return;
+    const pl={id:uid(),num,name,pos:POSMAP(p.pos),left:false,screen:'',start:'',end:'',injured:false,injNote:'',ret:''};
+    S.players.push(pl);have.push(pl);n++;
+  });
+  save();render();toast(n?'Added '+n+' player'+(n===1?'':'s')+' from the latest line-up.':'Everyone in the latest line-up is already in the squad.');
+}
 function proAct(a,ds){
   switch(a){
     case 'proOpen':{const m=PRO.matches.find(x=>proKey(x)===ds.id);if(!m)return true;V.tab='pro';PRO.ref=ds.id;PRO.err='';V.top=1;render();if(m.status==='finished'&&!PRO.detail[ds.id])proDetail(m);return true}
+    case 'proSquad':proFillSquad();return true;
     case 'proClose':PRO.ref=null;PRO.err='';V.tab='history';V.top=1;render();return true;
   }
   return false;
