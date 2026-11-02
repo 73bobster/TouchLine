@@ -393,7 +393,8 @@ main.lvm{padding-top:4px}
 .ctlbar .cb .btn{padding:0 9px;font-size:13px}
 .d2{grid-template-columns:minmax(0,1fr) 92px}
 .d2 .acts .dz{font-size:12px;border-width:2px;font-weight:800;background:var(--card)}
-.d2 .acts .dz i{font-size:26px}
+.d2 .acts .dz{line-height:1;gap:1px;overflow:hidden}
+.d2 .acts .dz i{font-size:min(26px,4.6dvh);line-height:1;display:block}
 .d2 .acts .dz.g{background:#e3f4e9}
 .notebtn{min-height:44px;margin:0 0 6px}
 .d2 + .notebtn{margin-top:0}
@@ -1218,6 +1219,7 @@ function formStrip(ms){
   const sq=ms.slice().reverse().map(m=>{const x=score(m);const r=x.us>x.them?'w':x.us===x.them?'d':'l';return `<i class="${r}" title="${esc(m.opp||'')} ${x.us}-${x.them}">${r.toUpperCase()}</i>`}).join('');
   return `<div class="formstrip" aria-label="Recent results, oldest first">${sq}</div>`;
 }
+function fitClock(c){const n=c.textContent.length;c.style.fontSize=n>5?Math.max(15,Math.floor(30*5.3/n))+'px':''}
 function fitForm(){
   document.querySelectorAll('.formstrip').forEach(el=>{
     const k=[...el.children];k.forEach(c=>c.classList.remove('h'));
@@ -2830,11 +2832,12 @@ function render(){
   document.body.classList.remove('mb');
   renderSheet();
   fitForm();
+  const ck=$('#clock');if(ck)fitClock(ck);
 }
 
 setInterval(()=>{
   const m=M()||(!canEdit()&&liveOther());if(!m||m.status!=='live'||V.tab!=='match')return;
-  const c=$('#clock');if(c)c.textContent=fmtClock(m);
+  const c=$('#clock');if(c){c.textContent=fmtClock(m);fitClock(c)}
   if(++TICK%40===0){const t=$('#ptab');if(t&&!V.sheet)t.innerHTML=liveTable(m);const mp=gmMap(m);document.querySelectorAll('.gm[data-gm]').forEach(g=>{const v=mp[g.dataset.gm];if(v!==undefined)g.textContent=v+"'"})}
 },250);
 let TICK=0;
