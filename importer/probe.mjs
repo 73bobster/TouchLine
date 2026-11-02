@@ -25,8 +25,11 @@ say(`status: HTTP ${st.http}${st.errors.length ? ' errors: ' + st.errors.join(';
 if (acct) say(`plan: ${acct.subscription.plan}, active: ${acct.subscription.active}, requests today: ${acct.requests.current}/${acct.requests.limit_day}`);
 
 async function team(name, search) {
-  const t = await api('/teams?country=Scotland&search=' + encodeURIComponent(search));
-  const hit = t.resp.find((x) => x.team && !x.team.national) || null;
+  // The API rejects `country` combined with `search`, so search by name and keep the Scottish club client-side.
+  const t = await api('/teams?search=' + encodeURIComponent(search));
+  const club = t.resp.filter((x) => x.team && !x.team.national);
+  const hit = club.find((x) => x.team.country === 'Scotland') || null;
+  if (!hit && club.length) say(`(no Scottish match; ${club.length} club(s) elsewhere named like "${search}")`);
   say(`\n## ${name}: team search "${search}" -> HTTP ${t.http}, ${t.results} result(s)${t.errors.length ? ', errors: ' + t.errors.join('; ') : ''}`);
   if (hit) say(`found: id ${hit.team.id}, "${hit.team.name}", venue ${hit.venue && hit.venue.name}`);
   return hit && hit.team.id;
