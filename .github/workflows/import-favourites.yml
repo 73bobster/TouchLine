@@ -1,0 +1,60 @@
+name: Import favourite teams
+# Reads Rangers and Hearts fixtures, results and match detail (goals, assists, cards, line-ups, subs) and loads them into Neon.
+#  - push to the feature branch (importer changes): dry run, prints a report, never touches the database
+#    unless the commit message contains [load], which also loads a full backfill into Neon
+#  - Run workflow (by hand, once on the default branch): full backfill (--details all), loads into Neon
+#  - schedule: hourly, only inside 13:00-23:59 UK time (the script enforces the window), recent games only.
+#    GitHub runs schedules from the default branch, so this starts once the work is merged to main.
+# Needs for the database load: repository secret NEON_DATABASE_URL (Neon > project touchline > Connect > owner role).
+on:
+  push:
+    branches: [feature/favourite-teams-import]
+    paths: ['importer/import.mjs', 'importer/sources/**', 'importer/test/**', '.github/workflows/import-favourites.yml']
+  workflow_dispatch:
+    inputs:
+      source:
+        description: 'Source: bbc (default) or apifootball (paid plan, needs APIFOOTBALL_KEY)'
+        default: bbc
+  schedule:
+    - cron: '7 12-23 * * *'   # UTC hours that can fall inside 13:00-23:59 UK in both GMT and BST
+permissions:
+  contents: read
+concurrency:
+  group: import-favourites
+  cancel-in-progress: false
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    env:
+      NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node --test importer/test/importer.test.mjs
+      - name: Fetch from source
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            node importer/import.mjs --source bbc --details recent --sql importer/out/upsert.sql
+          else
+            node importer/import.mjs --source "${{ inputs.source || 'bbc' }}" --from 2026-08 --to 2026-11 --details all --sql importer/out/upsert.sql --force
+          fi
+        env:
+          APIFOOTBALL_KEY: ${{ secrets.APIFOOTBALL_KEY }}
+      - name: Load into Neon
+        if: (github.event_name != 'push' || contains(github.event.head_commit.message, '[load]')) && env.NEON_DATABASE_URL != '' && hashFiles('importer/out/upsert.sql') != ''
+        run: |
+          psql "$NEON_DATABASE_URL" -v ON_ERROR_STOP=1 -q -f importer/out/upsert.sql
+          {
+            echo '```'
+            echo "loaded into Neon:"
+            psql "$NEON_DATABASE_URL" -At -c "select 'games ' || count(*) || ' (' || count(*) filter (where status='finished') || ' finished)' from public.pro_matches"
+            psql "$NEON_DATABASE_URL" -At -c "select 'players ' || count(*) from public.pro_match_players"
+            psql "$NEON_DATABASE_URL" -At -c "select 'events ' || count(*) || ' (goals ' || count(*) filter (where type in ('goal','own_goal')) || ', cards ' || count(*) filter (where type in ('yellow','red')) || ', subs ' || count(*) filter (where type='sub') || ')' from public.pro_match_events"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Note when the database load is skipped
+        if: (github.event_name != 'push' || contains(github.event.head_commit.message, '[load]')) && env.NEON_DATABASE_URL == ''
+        run: |
+          echo 'Skipped the Neon load. Add the repository secret NEON_DATABASE_URL, then run this workflow again.' | tee -a "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,20 @@
+name: Probe football API (free plan)
+# Runs when the probe changes on the feature branch, or when you press "Re-run all jobs".
+# Needs the repository secret APIFOOTBALL_KEY. Prints a field report only; no keys or raw data.
+on:
+  push:
+    branches: [feature/favourite-teams-import]
+    paths: ['importer/probe.mjs', '.github/workflows/probe-api.yml']
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node importer/probe.mjs
+        env:
+          APIFOOTBALL_KEY: ${{ secrets.APIFOOTBALL_KEY }}
