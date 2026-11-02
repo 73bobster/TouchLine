@@ -643,6 +643,7 @@ function stats(pid){
       if(e.t==='red'&&e.playerId===pid)o.rc++;
     }
   }
+  const f=feedMap()[pid];if(f)for(const k in f)o[k]+=f[k];
   o.apps=o.played;
   return o;
 }
@@ -1865,7 +1866,7 @@ function act(a,ds,el){
   const m=M();
   if(actExtra(a,ds,el))return;
   switch(a){
-    case 'tab':V.top=1;if((ds.tab==='history'||ds.tab==='match'||ds.tab==='squad')&&S.team&&S.team.proTeam)setTimeout(()=>proLoad(),0);V.ts=null;V.tab=ds.tab;V.matchId=null;V.sheet=null;V.sess=null;V.newTeam=false;break;
+    case 'tab':V.top=1;if((ds.tab==='history'||ds.tab==='match'||ds.tab==='squad'||ds.tab==='stats')&&S.team&&S.team.proTeam)setTimeout(()=>proLoad(),0);V.ts=null;V.tab=ds.tab;V.matchId=null;V.sheet=null;V.sess=null;V.newTeam=false;break;
     case 'createTeam':{
       const t=V.draft;if(!t.name.trim()){V.err='Give your team a name first.';break}
       V.err='';S.team=Object.assign({},t,{name:t.name.trim()});save();V.tab='squad';break}
@@ -2452,7 +2453,7 @@ function statsView(){
   const val=r=>k==='num'?r.p.num:k==='name'?r.p.name:k==='att'?(r.a.pct==null?-1:r.a.pct):(r.s[k]||0);
   rows.sort((x,y)=>{const a=val(x),b=val(y);const c=typeof a==='string'?a.localeCompare(b):a-b;return c*dir||x.p.num-y.p.num});
   const tot={};STAT_COLS.forEach(c=>{tot[c[1]]=rows.reduce((n,r)=>n+r.s[c[1]],0)});
-  const done=S.matches.filter(m=>m.status==='done'&&compOk(m)).length;
+  const done=S.matches.filter(m=>m.status==='done'&&compOk(m)).length+feedGames();
   const allEv=S.matches.filter(m=>m.status==='done'&&compOk(m)).flatMap(m=>m.events);
   const pinned=allEv.filter(e=>e.x!=null||e.ax!=null);
   const pinIds=[...new Set(pinned.flatMap(e=>[e.playerId,e.assistId]).filter(id=>id&&P(id)))];
@@ -2463,7 +2464,7 @@ function statsView(){
   ${rows.length?`<div class="tbl"><table><thead><tr>${th('num','#','n','Sort by number')}${th('name','Name','nm','Sort by name')}${STAT_COLS.map(c=>th(c[1],c[0],'',c[2])).join('')}${th('att','Att','','Training attendance')}</tr></thead>
   <tbody>${rows.map(r=>`<tr data-act="pstat" data-id="${r.p.id}"><td class="n">${esc(r.p.num)}</td><td class="nm">${esc(r.p.name)}</td>${STAT_COLS.map(c=>`<td>${cell(c,r.s[c[1]])}</td>`).join('')}<td>${r.a.pct==null?'–':r.a.pct+'%'}</td></tr>`).join('')}</tbody>
   <tfoot><tr><td class="n"></td><td class="nm">Team</td>${STAT_COLS.map(c=>`<td>${cell(c,tot[c[1]])}</td>`).join('')}<td></td></tr></tfoot></table></div>
-  <div class="note">Tap a column heading to sort, and tap it again to reverse. Sel = in the matchday squad · MP = played · St = started · Min = minutes played (to the final whistle, stoppage included) · 🅰 assists · 🎯 shots · 🔑 key passes · 🧤 saves · 🛡 key defending · Att = training attendance. Only finished matches count. Tap a player for the full picture.</div>`
+  <div class="note">Tap a column heading to sort, and tap it again to reverse. Sel = in the matchday squad · MP = played · St = started · Min = minutes played (to the final whistle, stoppage included) · 🅰 assists · 🎯 shots · 🔑 key passes · 🧤 saves · 🛡 key defending · Att = training attendance. Only finished matches count.${S.team.proTeam?' Games for the club come from the feed (appearances, minutes, goals, assists and cards); shots, key passes, saves and defending are only counted from matches you record yourself, and those add to it. Your own recording is used instead of the feed for a game you recorded.':''} Tap a player for the full picture.</div>`
   :`<div class="empty"><b>No players yet</b>Add your squad first.</div>`}
   ${pinned.length?`<h2>Shot map</h2><div class="chips small tight scr" style="margin:6px 0"><button class="${V.smp?'':'on'}" data-act="smpSet" data-v="">Whole team</button>${byNum(pinIds).map(id=>`<button class="${V.smp===id?'on':''}" data-act="smpSet" data-v="${id}">${esc(sname(P(id)))}</button>`).join('')}</div>${shotMapHtml(allEv,V.smp||'')||'<div class="note">No pinned shots for this player yet.</div>'}`:''}
   </main>`;
@@ -2967,7 +2968,7 @@ function clubFind(txt){const k=clubKey(txt);if(!k)return null;const a=CLUB_ALIAS
 /* ---------- pro games: read-only, from the importer's tables ---------- */
 const PROKEY='touchline-pro-v1';
 const PRO=(()=>{let o={};try{o=JSON.parse(localStorage.getItem(PROKEY)||'{}')}catch(e){}return Object.assign({matches:[],detail:{},at:0,filter:'all',ref:null,busy:false,err:''},o,{busy:false,err:'',ref:null})})();
-const proSave=()=>{try{localStorage.setItem(PROKEY,JSON.stringify({matches:PRO.matches,detail:PRO.detail,at:PRO.at,filter:PRO.filter,slug:PRO.slug}))}catch(e){}};
+const proSave=()=>{try{localStorage.setItem(PROKEY,JSON.stringify({matches:PRO.matches,detail:PRO.detail,at:PRO.at,filter:PRO.filter,slug:PRO.slug,season:PRO.season}))}catch(e){}};
 const PROTEAMS={rangers:'Rangers','heart-of-midlothian':'Hearts'};
 const proDate=d=>{try{return new Date(d+'T12:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short',year:'numeric'})}catch(e){return d}};
 const proKey=m=>m.source_ref;
@@ -2975,14 +2976,14 @@ async function proLoad(force){
   const slug=S.team&&S.team.proTeam;
   if(!CLOUD||!DB.user||PRO.busy||!slug)return;
   if(PRO.slug!==slug){PRO.slug=slug;PRO.matches=[];PRO.at=0}
-  if(!force&&PRO.at&&Date.now()-PRO.at<300000){proAutoSquad();return}
+  if(!force&&PRO.at&&Date.now()-PRO.at<300000){proAutoSquad();proSeasonLoad();return}
   PRO.busy=true;PRO.err='';PRO.tried=slug;render();
   try{
     PRO.matches=await rest('GET','/pro_matches?select=source,source_ref,teams,comp,match_date,kickoff,home,away,home_goals,away_goals,status,raw_status,venue,attendance,referee,home_manager,away_manager,home_formation,away_formation,detail_fetched_at&teams=cs.%7B'+encodeURIComponent(slug)+'%7D&order=match_date.asc&limit=500')||[];
     PRO.at=Date.now();proSave();
   }catch(e){PRO.err=navigator.onLine?(e.status===401||e.code==='auth'?'Sign in again to load these games.':'Could not load games ('+e.message+').'):'You are offline.'}
   PRO.busy=false;render();
-  proAutoSquad();
+  proAutoSquad();proSeasonLoad();
 }
 function proAutoSquad(){const t=S.team;if(t&&t.proTeam&&PRO.slug===t.proTeam&&canEdit()&&activePlayers().length<2&&!t.proAuto&&PRO.matches.some(m=>m.status==='finished')){t.proAuto=true;proFillSquad(true)}}
 async function proDetail(m){
@@ -3059,6 +3060,64 @@ function proView(){
   const m=PRO.ref&&PRO.matches.find(x=>proKey(x)===PRO.ref);
   return m?proDetailView(m):historyView();
 }
+/* ---------- stats from the feed: season line-ups and goals for a followed club, matched to your squad by name ---------- */
+const nrm=x=>String(x||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z ]/g,' ').replace(/\s+/g,' ').trim();
+function feedPid(name,num,ps){
+  const n=nrm(name);if(!n)return null;const tk=n.split(' '),last=tk[tk.length-1],first=tk[0];
+  let hit=ps.find(p=>nrm(p.name)===n);if(hit)return hit.id;
+  hit=ps.find(p=>{const q=nrm(p.name).split(' '),ql=q[q.length-1];return ql===last&&(q[0]===first||q[0][0]===first[0]||q.length===1||tk.length===1)});if(hit)return hit.id;
+  hit=ps.find(p=>p.num===num&&nrm(p.name).split(' ').some(w=>w.length>2&&tk.includes(w)));if(hit)return hit.id;
+  const same=ps.filter(p=>{const q=nrm(p.name).split(' ');return q[q.length-1]===last});
+  return same.length===1?same[0].id:null;
+}
+const proClubSide=m=>{const ck=clubKey(S.team&&S.team.proClub);return (clubKey(m.home)===ck||(ck&&clubKey(m.home).includes(ck)))?'home':'away'};
+async function proSeasonLoad(force){
+  const t=S.team;if(!CLOUD||!DB.user||!t||!t.proTeam||PRO.sbusy)return;
+  const fin=PRO.matches.filter(m=>m.status==='finished');if(!fin.length)return;
+  const sig=fin.length+'|'+t.proTeam;
+  if(!force&&PRO.season&&PRO.season.sig===sig&&Date.now()-PRO.season.at<3600000)return;
+  PRO.sbusy=true;
+  try{
+    const pl=[],ev=[];
+    for(let i=0;i<fin.length;i+=25){
+      const refs=fin.slice(i,i+25).map(m=>'"'+m.source_ref+'"').join(',');const f='source_ref=in.('+encodeURIComponent(refs)+')';
+      pl.push(...(await rest('GET','/pro_match_players?select=source_ref,side,num,name,pos,starter,on_min,off_min,yellow,red&'+f+'&limit=5000')||[]));
+      ev.push(...(await rest('GET','/pro_match_events?select=source_ref,type,side,minute,player,assist&type=eq.goal&'+f+'&limit=5000')||[]));
+    }
+    PRO.season={sig,at:Date.now(),slug:t.proTeam,pl,ev};proSave();
+  }catch(e){PRO.err=navigator.onLine?'Could not load season stats ('+e.message+').':''}
+  PRO.sbusy=false;FEED.key='';render();
+}
+const FEED={key:'',map:{},n:0};
+function feedMap(){
+  const t=S.team;
+  if(!CLOUD||!t||!t.proTeam||!PRO.season||PRO.season.slug!==t.proTeam)return {};
+  const ps=activePlayers();
+  const key=PRO.season.at+'|'+(V.comp||'')+'|'+S.matches.length+'|'+ps.map(p=>p.id+p.num+p.name).join(',');
+  if(FEED.key===key)return FEED.map;
+  const map={};let n=0;const get=id=>map[id]||(map[id]={sel:0,played:0,started:0,mins:0,goals:0,assists:0,yc:0,rc:0});
+  const byRef={};PRO.season.pl.forEach(x=>{(byRef[x.source_ref]=byRef[x.source_ref]||[]).push(x)});
+  const evRef={};PRO.season.ev.forEach(x=>{(evRef[x.source_ref]=evRef[x.source_ref]||[]).push(x)});
+  for(const m of PRO.matches){
+    if(m.status!=='finished'||proRecorded(m)||(V.comp&&compNorm(m.comp)!==V.comp))continue;
+    const side=proClubSide(m),rows=(byRef[m.source_ref]||[]).filter(x=>x.side===side);
+    if(!rows.length&&!(evRef[m.source_ref]||[]).length)continue;
+    n++;
+    rows.forEach(x=>{
+      const id=feedPid(x.name,x.num,ps);if(!id)return;const o=get(id);
+      o.sel++;
+      const on=x.starter||x.on_min!=null;
+      if(on){o.played++;if(x.starter)o.started++;const st=x.starter?0:x.on_min,en=x.off_min!=null?x.off_min:90;o.mins+=Math.max(0,Math.min(en,120)-st)}
+      o.yc+=(x.yellow||[]).length;o.rc+=(x.red||[]).length;
+    });
+    (evRef[m.source_ref]||[]).filter(e=>e.side===side).forEach(e=>{
+      const a=feedPid(e.player,null,ps);if(a)get(a).goals++;
+      if(e.assist){const b=feedPid(e.assist,null,ps);if(b)get(b).assists++}
+    });
+  }
+  FEED.key=key;FEED.map=map;FEED.n=n;return map;
+}
+const feedGames=()=>{feedMap();return FEED.n};
 const POSMAP=p=>{const x=String(p||'').toLowerCase();return /goalkeeper|keeper/.test(x)?'GK':/back|defend/.test(x)?'DEF':/midfield/.test(x)?'MID':/striker|forward|winger|attack(er)?$/.test(x)?'FWD':''};
 async function proFillSquad(quiet){
   const t=S.team;if(!t||!t.proTeam||PRO.busy)return;
@@ -3066,6 +3125,15 @@ async function proFillSquad(quiet){
   if(!fin.length){if(!quiet)toast('No games imported for this club yet. Try again after the next feed.');return}
   PRO.busy=true;render();let got=null;
   try{
+    if(!PRO.season||PRO.season.slug!==t.proTeam){PRO.busy=false;await proSeasonLoad(true);PRO.busy=true}
+    if(PRO.season&&PRO.season.slug===t.proTeam){ // the whole squad: everyone named in any line-up this season, newest number first
+      const dateOf={};PRO.matches.forEach(m=>{dateOf[m.source_ref]=[m.match_date,proClubSide(m)]});
+      const seen=new Set(),rows=PRO.season.pl.filter(x=>dateOf[x.source_ref]&&dateOf[x.source_ref][1]===x.side).sort((a,b)=>dateOf[b.source_ref][0].localeCompare(dateOf[a.source_ref][0]));
+      const bestPos={};rows.forEach(x=>{const k=nrm(x.name);if(!bestPos[k]&&x.pos&&x.pos!=='Substitute')bestPos[k]=x.pos});
+      const all=[];rows.forEach(x=>{const k=nrm(x.name);if(k&&!seen.has(k)){seen.add(k);all.push({num:x.num,name:x.name,pos:bestPos[k]||x.pos})}});
+      if(all.length)got=all;
+    }
+    if(!got)
     for(const m of fin.slice(0,6)){
       const home=clubKey(m.home)===ck||(ck&&clubKey(m.home).includes(ck));
       const q='source=eq.'+encodeURIComponent(m.source)+'&source_ref=eq.'+encodeURIComponent(m.source_ref)+'&side=eq.'+(home?'home':'away');
