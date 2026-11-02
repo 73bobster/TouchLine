@@ -2,6 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parseMonth } from '../sources/bbc.mjs';
+import { parseMatchPage } from '../sources/bbc-detail.mjs';
 import { merge, monthRange, inPollWindow, ukHour, toSql } from '../import.mjs';
 
 // Minimal page shaped like BBC's month view: date heading, competition heading, then a hidden summary sentence.
@@ -17,7 +18,7 @@ const page = `<html><body><nav>Oct 2026</nav><main>
 test('parses results and fixtures with date, competition and year', () => {
   const { matches } = parseMonth(page, '2026-10', 'rangers');
   assert.equal(matches.length, 5);
-  assert.deepEqual(matches[0], { team: 'rangers', comp: 'League Cup - Semi-finals', date: '2026-10-31', kickoff: null, home: 'Rangers', away: 'Aberdeen', homeGoals: 1, awayGoals: 0, status: 'finished', rawStatus: 'Full time' });
+  assert.deepEqual(matches[0], { team: 'rangers', comp: 'League Cup - Semi-finals', date: '2026-10-31', kickoff: null, home: 'Rangers', away: 'Aberdeen', homeGoals: 1, awayGoals: 0, status: 'finished', rawStatus: 'Full time', pageId: null });
   assert.equal(matches[1].home, 'Heart of Midlothian');
   assert.equal(matches[1].date, '2026-10-28');
   assert.equal(matches[4].status, 'scheduled');
@@ -68,4 +69,62 @@ test('month range, polling window and sql quoting', () => {
   const sql = toSql(merge([{ team: 't', comp: "Ladies' Cup", date: '2026-10-31', kickoff: null, home: "O'Neil", away: 'B', homeGoals: 1, awayGoals: 0, status: 'finished', rawStatus: 'Full time' }]), 'bbc');
   assert.match(sql, /'Ladies'' Cup'/);
   assert.match(sql, /on conflict \(source, source_ref\)/);
+});
+
+// Match page shaped like BBC's: key events, assists, venue/attendance, then line-ups with cards and substitutions.
+const pl = (num, sur, pos, shown, extra = '') => `<li><button><div><span>Number</span><div>${num}</div><span>${num}, ${sur}, ${pos}</span></div><div><span><span>${shown}</span> </span>${extra}</div></button></li>`;
+const sub = (name, min) => `<span>${name} ${min}&#x27;</span><span>, substituted for ${name} at ${min} minutes</span>`;
+const card = (min, kind = 'Yellow') => `<span>${min}&#x27;</span><span>, ${kind} Card at ${min} minutes</span>`;
+const matchPage = `<html><body><main>
+<h3>Key Events</h3>
+<div><div><h4>Heart of Midlothian</h4></div><ul><li><span>Cl\u00e1udio Braga<!-- --> </span><span><span>(<!-- -->48&#x27;<!-- -->)</span></span><span>Goal 48 minutes</span></li><li><span>C. Miller<!-- --> </span><span><span>(<!-- -->57&#x27;<!-- -->)</span></span><span>Goal 57 minutes</span></li></ul></div>
+<div><div><h4>Rangers</h4></div><ul><li><span>K. Kelsy<!-- --> </span><span><span>(<!-- -->16&#x27;<!-- -->)</span></span><span>Goal 16 minutes</span></li><li><span>O. Makhanya<!-- --> </span><span><span>(<!-- -->89&#x27;<!-- -->)</span></span><span>Goal 89 minutes</span></li></ul></div>
+<div><div><div>Assists</div><div><span>Heart of Midlothian,</span>M. Fagan-Walcott (48&#x27;)</div><div><span>Rangers,</span>R. Naderi (16&#x27;), B. Bouanani (89&#x27;)</div></div></div>
+<div><hr><div><div><span>Venue:</span>Tynecastle Park</div></div><div><div><span>Attendance:</span>18,692</div></div></div>
+<div><span>home team,</span><span>Heart of Midlothian</span><span>Manager:</span><span>Wouter Vrancken</span><span>Formation:</span><span>4 - 2 - 3 - 1</span>
+<h4>Pitch Formation</h4><ul>${pl(1, 'Reus', 'Goalkeeper', 'Reus')}</ul>
+<h4>Starting lineup</h4><ul>${pl(1, 'Reus', 'Goalkeeper', 'B. Reus')}${pl(74, 'Mato', 'Defender', 'R. Mato', sub('S. Kingsley', 33))}${pl(5, 'McCart', 'Defender', 'J. McCart (c)', '<span>, Captain</span>')}${pl(23, 'Altena', 'Defender', 'J. Altena', card(72))}</ul>
+<h4>Substitutes</h4><ul>${pl(3, 'Kingsley', 'Substitute', 'S. Kingsley')}</ul></div>
+<div><span>away team,</span><span>Rangers</span><span>Manager:</span><span>Derek McInnes</span><span>Formation:</span><span>4 - 2 - 3 - 1</span>
+<h4>Starting lineup</h4><ul>${pl(1, 'Pandur', 'Goalkeeper', 'I. Pandur')}${pl(29, 'Penrice', 'Defender', 'J. Penrice', card(61) + sub('T. Rommens', 63))}${pl(8, 'Smith', 'Midfielder', 'A. Smith', card(90, 'Red'))}</ul>
+<h4>Substitutes</h4><ul>${pl(25, 'Rommens', 'Substitute', 'T. Rommens')}</ul></div>
+<div><span>Match Officials</span><span>Referee:</span><span>Don Robertson</span></div>
+</main></body></html>`;
+
+test('match page: goals, assists, cards, subs, line-ups and officials', () => {
+  const d = parseMatchPage(matchPage);
+  assert.equal(d.venue, 'Tynecastle Park');
+  assert.equal(d.attendance, 18692);
+  assert.equal(d.referee, 'Don Robertson');
+  assert.equal(d.sides.length, 2);
+  const [home, away] = d.sides;
+  assert.equal(home.club, 'Heart of Midlothian');
+  assert.equal(home.manager, 'Wouter Vrancken');
+  assert.equal(home.formation, '4-2-3-1');
+  assert.equal(home.players.filter((p) => p.starter).length, 4);   // pitch diagram is not double counted
+  assert.equal(home.players.filter((p) => !p.starter).length, 1);
+  assert.equal(home.players.find((p) => p.num === 5).captain, true);
+  assert.equal(home.players.find((p) => p.name === 'J. McCart').name, 'J. McCart');
+  const goals = d.events.filter((e) => e.type === 'goal');
+  assert.deepEqual(goals.map((g) => [g.minute, g.side, g.player, g.assist]), [
+    [16, 'away', 'K. Kelsy', 'R. Naderi'], [48, 'home', 'Cl\u00e1udio Braga', 'M. Fagan-Walcott'], [57, 'home', 'C. Miller', null], [89, 'away', 'O. Makhanya', 'B. Bouanani']]);
+  assert.deepEqual(d.events.filter((e) => e.type === 'yellow').map((e) => [e.minute, e.side, e.player]), [[61, 'away', 'J. Penrice'], [72, 'home', 'J. Altena']]);
+  assert.deepEqual(d.events.filter((e) => e.type === 'red').map((e) => [e.minute, e.player]), [[90, 'A. Smith']]);
+  assert.deepEqual(d.events.filter((e) => e.type === 'sub').map((e) => [e.minute, e.side, e.player, e.on]), [[33, 'home', 'R. Mato', 'S. Kingsley'], [63, 'away', 'J. Penrice', 'T. Rommens']]);
+  const kingsley = home.players.find((p) => p.name === 'S. Kingsley');
+  assert.equal(kingsley.onMin, 33);
+  assert.equal(kingsley.replaced, 'R. Mato');
+  assert.equal(d.notes.length, 0);
+});
+
+test('detail rows are written as a replace-per-match transaction', () => {
+  const d = parseMatchPage(matchPage);
+  const row = { team: 't', ref: '2026-10-28|H|R', teams: ['t'], comp: 'Prem', date: '2026-10-28', kickoff: null, home: 'H', away: 'R', homeGoals: 2, awayGoals: 2, status: 'finished', rawStatus: 'Full time', pageId: 'abc', detail: d };
+  const sql = toSql([row], 'bbc');
+  assert.match(sql, /^-- Generated[\s\S]*\nbegin;/);
+  assert.match(sql, /commit;\n$/);
+  assert.match(sql, /delete from public\.pro_match_players/);
+  assert.equal((sql.match(/insert into public\.pro_match_players/g) || []).length, 9);
+  assert.equal((sql.match(/insert into public\.pro_match_events/g) || []).length, 9); // 4 goals, 2 yellow, 1 red, 2 subs
+  assert.match(sql, /yellow, red\) values[^;]*array\[72\]::int\[\]/);
 });

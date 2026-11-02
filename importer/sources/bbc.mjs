@@ -54,8 +54,21 @@ function statusOf(raw) {
   return 'live';
 }
 
+// Each match is a link to /sport/football/live/<id>; pair the id with the summary sentence inside the link.
+function pageIds(html) {
+  const ids = new Map();
+  const re = /<a\b[^>]*href="[^"]*\/sport\/football\/live\/([a-z0-9]+)"[^>]*>([\s\S]*?)<\/a>/gi;
+  let m;
+  while ((m = re.exec(html))) {
+    const sentence = htmlToLines(m[2]).find((l) => RESULT_RE.test(l) || FIXTURE_RE.test(l));
+    if (sentence) { if (!ids.has(sentence)) ids.set(sentence, []); ids.get(sentence).push(m[1]); }
+  }
+  return ids;
+}
+
 export function parseMonth(html, ym, team) {
   const lines = htmlToLines(html);
+  const ids = pageIds(html);
   const out = [];
   const unknown = [];
   let date = null;
@@ -69,10 +82,11 @@ export function parseMonth(html, ym, team) {
     const prev = lines[i - 1] || '';
     if (prev && !DATE_RE.test(prev) && !JUNK_RE.test(prev) && !RESULT_RE.test(prev) && !FIXTURE_RE.test(prev)) comp = prev;
     if (!date) { unknown.push(line); return; }
+    const pageId = (ids.get(line) || []).shift() || null;
     if (r) {
-      out.push({ team, comp, date, kickoff: null, home: r[1], away: r[3], homeGoals: +r[2], awayGoals: +r[4], status: statusOf(r[5]), rawStatus: r[5] });
+      out.push({ team, comp, date, kickoff: null, home: r[1], away: r[3], homeGoals: +r[2], awayGoals: +r[4], status: statusOf(r[5]), rawStatus: r[5], pageId });
     } else {
-      out.push({ team, comp, date, kickoff: f[3], home: f[1], away: f[2], homeGoals: null, awayGoals: null, status: 'scheduled', rawStatus: 'scheduled' });
+      out.push({ team, comp, date, kickoff: f[3], home: f[1], away: f[2], homeGoals: null, awayGoals: null, status: 'scheduled', rawStatus: 'scheduled', pageId });
     }
   });
   return { matches: out, unknown };

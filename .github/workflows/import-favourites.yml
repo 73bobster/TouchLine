@@ -26,6 +26,6 @@ jobs:
         with:
           node-version: 22
       - run: node --test importer/test/importer.test.mjs
-      - run: node importer/import.mjs --source "${{ inputs.source || 'bbc' }}" --from 2026-08 --to 2026-11 --sql importer/out/upsert.sql --force
+      - run: node importer/import.mjs --source "${{ inputs.source || 'bbc' }}" --from 2026-08 --to 2026-11 --details all --sql importer/out/upsert.sql --force
         env:
           APIFOOTBALL_KEY: ${{ secrets.APIFOOTBALL_KEY }}
