@@ -2162,8 +2162,12 @@ async function createTeamCloud(){
   const t=V.draft;if(!t.name.trim()){V.err='Give your team a name first.';render();return}
   const id='t'+uid();V.err='';V.busy=true;render();
   try{
-    await rest('POST','/teams',{id,name:t.name.trim(),age:t.age||'',ground:t.ground||'',primary_colour:t.primary,secondary_colour:t.secondary,on_pitch:num(t.onPitch),periods:num(t.periods),period_mins:num(t.periodMins)},'return=minimal');
-    await rest('POST','/team_members',{team_id:id,user_id:DB.user.id,role:'coach',display_name:DB.user.name,email:DB.user.email},'return=minimal');
+    if(DB.user.isSuper){
+      await rest('POST','/teams',{id,name:t.name.trim(),age:t.age||'',ground:t.ground||'',primary_colour:t.primary,secondary_colour:t.secondary,on_pitch:num(t.onPitch),periods:num(t.periods),period_mins:num(t.periodMins)},'return=minimal');
+      await rest('POST','/team_members',{team_id:id,user_id:DB.user.id,role:'coach',display_name:DB.user.name,email:DB.user.email},'return=minimal');
+    }else{ // everyone else creates through a database function that adds the team and makes them its coach
+      await rest('POST','/rpc/create_team',{p_id:id,p_name:t.name.trim(),p_age:t.age||'',p_ground:t.ground||'',p_primary:t.primary,p_secondary:t.secondary,p_on_pitch:num(t.onPitch),p_periods:num(t.periods),p_period_mins:num(t.periodMins)});
+    }
     SYNC.state='idle';await syncNow(true);setCur(id);V.tab='squad';
   }catch(e){V.err=e.message}
   V.busy=false;render();
@@ -2369,7 +2373,7 @@ function noTeamView(){
   ${V.err&&V.errFor==='join'?`<div class="err">${esc(V.err)}</div>`:''}
   <button class="btn block" data-act="joinNow">Join team</button>
   <div class="note" style="margin-bottom:0">Ask your coach or the app admin for a code. It works once and expires after 14 days.</div></div>
-  ${su?`<h2>Create a team (admin)</h2>${teamFields(V.draft)}${V.err&&V.errFor!=='join'?`<div class="err">${esc(V.err)}</div>`:''}<button class="btn block lg" data-act="createTeam" ${V.busy?'disabled':''}>${V.busy?'Creating…':'Create team and become its coach'}</button><div style="text-align:center;margin-top:8px"><button class="linkbtn" data-act="allTeamsOpen">Find an existing team instead</button></div>`:''}
+  ${`<h2>${su?'Create a team (admin)':'Or start your own team'}</h2>${teamFields(V.draft)}${V.err&&V.errFor!=='join'?`<div class="err">${esc(V.err)}</div>`:''}<button class="btn block lg" data-act="createTeam" ${V.busy?'disabled':''}>${V.busy?'Creating…':'Create team and become its coach'}</button>${su?`<div style="text-align:center;margin-top:8px"><button class="linkbtn" data-act="allTeamsOpen">Find an existing team instead</button></div>`:''}`}
   <div style="text-align:center;margin-top:14px">${first?`<button class="linkbtn" data-act="newTeamBack">‹ Back</button>`:''}<button class="linkbtn" data-act="signOutAsk">Sign out</button></div>
   </main>`;
 }
@@ -2387,7 +2391,7 @@ function teamSwitcher(){
   const su=DB.user&&DB.user.isSuper;
   return `<h2>Your teams</h2>
   ${all.map(x=>`<div class="prow" data-act="switchTeam" data-id="${esc(x.team.id)}" style="cursor:pointer;${x.team.id===DB.cur?'border-color:var(--p);border-width:2px':''}">${crest(x.team,40)}<div class="nm">${esc(x.team.name)}<small>${x.role==='coach'?'Coach':x.role==='reviewer'?'Reviewer':'Admin view'}${x.team.id===DB.cur?' · current':''}</small></div><span style="color:var(--mute)">›</span></div>`).join('')}
-  <div class="row" style="margin:10px 0 0"><button class="btn sec" data-act="newTeamOpen">${su?'＋ Create or join':'＋ Join with a code'}</button>${su?`<button class="btn sec" data-act="allTeamsOpen">Find any team</button>`:''}</div>`;
+  <div class="row" style="margin:10px 0 0"><button class="btn sec" data-act="newTeamOpen">＋ Create or join</button>${su?`<button class="btn sec" data-act="allTeamsOpen">Find any team</button>`:''}</div>`;
 }
 function teamView(){
   const t=S.team,ed=canEdit();
