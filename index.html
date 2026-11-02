@@ -1115,6 +1115,7 @@ const ZCELLS=(()=>{const o=[['Wide left',0,13.85,0,16.5],['Wide right',54.15,68,
 const zoneOf=(x,y)=>{if(y>PH)return{name:'Own half'};for(const [n,x0,x1,y0,y1] of ZCELLS)if(x>=x0&&x<=x1&&y>=y0&&y<=y1)return{name:n};return{name:''}};
 const inBox=(x,y)=>y<=16.5&&x>=13.85&&x<=54.15;
 function shotGeo(x,y){if(y>PH)return null;const d=Math.hypot(x-34,y);let a=Math.atan2(7.32*y,(x-34)*(x-34)+y*y-3.66*3.66)*180/Math.PI;if(a<0)a+=180;return{d,a}}
+const pinM=()=>V.sheet&&V.sheet.d&&V.sheet.d.fromLog?logMatch():M();
 const pinEv=(m,id)=>m&&m.events.find(e=>e.id===id);
 function maybePin(m,id,o){
   if(!m||!m.pins)return;
@@ -1149,6 +1150,19 @@ function pinNext(m,e){
   const d=V.sheet.d;
   if(d.step==='main'&&e.t==='goal'&&e.assistId&&P(e.assistId)){d.step='assist';renderSheet();return}
   V.sheet=d.fromLog?{kind:'log'}:null;render();
+}
+function mdetBody(d){
+  const comps=[...new Set(['League','Cup','Friendly','Tournament',...S.matches.map(x=>x.comp).filter(Boolean)])];
+  const opps=[...new Set(S.matches.map(x=>x.opp).filter(Boolean))];
+  return sheetWrap('Match details',`<label>Opposition<input data-sbind="opp" list="oppl2" value="${esc(d.opp||'')}" autocomplete="off"></label><datalist id="oppl2">${opps.map(o=>`<option value="${esc(o)}">`).join('')}</datalist>
+  <div class="lbl">Venue</div><div class="seg">${[['home','Home'],['away','Away'],['neutral','Neutral']].map(([k,l])=>`<button class="${d.venue===k?'on':''}" data-act="mdetVenue" data-v="${k}">${l}</button>`).join('')}</div>
+  <label>Ground / pitch<input data-sbind="location" value="${esc(d.location||'')}" autocomplete="off"></label>
+  <label>Competition<input data-sbind="comp" list="compl2" value="${esc(d.comp||'')}" autocomplete="off"></label><datalist id="compl2">${comps.map(o=>`<option value="${esc(o)}">`).join('')}</datalist>
+  <label>Referee<input data-sbind="referee" value="${esc(d.referee||'')}" autocomplete="off"></label>
+  <div class="row"><label>Date<input type="date" data-sbind="date" value="${esc(d.date||'')}"></label><label>Kick-off<input type="time" data-sbind="time" value="${esc(d.time||'')}"></label></div>
+  <div class="row"><label>Periods<input type="number" inputmode="numeric" data-sbind="periods" value="${esc(d.periods)}"></label><label>Mins each<input type="number" inputmode="numeric" data-sbind="periodMins" value="${esc(d.periodMins)}"></label></div>
+  ${d.err?`<div class="err">${esc(d.err)}</div>`:''}
+  <button class="btn block lg" data-act="mdetSave">Save details</button>`);
 }
 function pinBar(m){
   if(V.tab!=='match'||!m||m.status!=='live'||!canEdit())return '';
@@ -1597,7 +1611,8 @@ function renderSheet(){
       html=s.step===0?sheetWrap('Key defending — who?',pgrid(byNum([...pitchSet(m)]),'pick')):sheetWrap('What was it?',chips(['Tackle','Interception','Clearance','Block'],'pick'),true);break;
     case 'mistake':
       html=s.step===0?sheetWrap('Mistake — who?',pgrid(byNum([...pitchSet(m)]),'pick')):sheetWrap(esc(label(d.pid))+' — what was it?',chips(MISTAKES,'pick'),true);break;
-    case 'where':html=whereBody(m,d);break;
+    case 'where':html=whereBody(d.fromLog?logMatch():m,d);break;
+    case 'mdet':html=mdetBody(d);break;
     case 'team':html=teamBody(m);break;
     case 'bal':html=balanceBody(m);break;
     case 'captain':html=sheetWrap('Who is the captain?',pgrid(byNum(Object.keys(m.squad).filter(id=>m.squad[id].role==='starter'||m.squad[id].role==='sub')).sort((a,b)=>(m.squad[a].role==='starter'?0:1)-(m.squad[b].role==='starter'?0:1)),'capSet',`<button class="pb alt" data-act="capSkip"><b>—</b><span>${d.ko?'Skip':'None'}</span></button>`));break;
@@ -1612,7 +1627,7 @@ function renderSheet(){
       html=sheetWrap('Note',`<label>What happened?<textarea data-sbind="text" placeholder="e.g. great save from a corner, ref gave a late penalty…">${esc(d.text||'')}</textarea></label><button class="btn block lg" data-act="noteSave">Save note</button>`);break;
     case 'log':{
       const mm=logMatch();const ev=sortedEvents(mm).slice().reverse();const ed=canEdit();
-      html=sheetWrap('Match log',(ed?`<button class="btn block" data-act="evNew" style="margin-bottom:10px">＋ Add an event</button>`:'')+(ev.length?ev.map(e=>`<div class="log"><div class="mn">${fmtMin(e,mm)}</div><div class="tx">${describe(e,mm)}</div>${ed?`<button data-act="evEdit" data-id="${e.id}" aria-label="Edit">✎</button><button data-act="evDel" data-id="${e.id}" aria-label="Delete">🗑</button>`:''}</div>`).join(''):'<div class="empty">Nothing recorded yet</div>')+(ed?`<button class="btn bad block" data-act="delMatchAsk" style="margin-top:14px">🗑 Delete this match</button>`:''));
+      html=sheetWrap('Match log',(ed?`<div class="row" style="margin-bottom:10px"><button class="btn sec" data-act="mdetOpen">✎ Match details</button><button class="btn" data-act="evNew">＋ Add an event</button></div>`:'')+(ev.length?ev.map(e=>`<div class="log"><div class="mn">${fmtMin(e,mm)}</div><div class="tx">${describe(e,mm)}</div>${ed&&(e.t==='shot'||(e.t==='goal'&&e.how!=='Own goal'&&e.how!=='Opp own goal'))?`<button data-act="pinEdit" data-id="${e.id}" aria-label="Set location" title="Set location">${e.x!=null?'📍':'📌'}</button>`:''}${ed?`<button data-act="evEdit" data-id="${e.id}" aria-label="Edit">✎</button><button data-act="evDel" data-id="${e.id}" aria-label="Delete">🗑</button>`:''}</div>`).join(''):'<div class="empty">Nothing recorded yet</div>')+(ed?`<button class="btn bad block" data-act="delMatchAsk" style="margin-top:14px">🗑 Delete this match</button>`:''));
       break}
     case 'evMin':
       html=sheetWrap('Change minute',`<label>Minute<input type="number" inputmode="numeric" class="big-in" data-sbind="minute" value="${esc(d.minute)}"></label><button class="btn block lg" data-act="evMinSave">Save</button>`);break;
@@ -2672,7 +2687,7 @@ function sheetExtra(s,m,d){
 }
 
 /* ---------- extra actions ---------- */
-const EDIT_ACTS=new Set(['delMatchAsk','playerNew','playerEdit','playerRestore','playerSave','playerRemove','importOpen','importParse','importAdd','importBack','importDel','matchNew','venue','matchNext','backDetails','cancelMatch','role','reason','restSub','toLive','editLineup','ko','pause','resume','endPeriod','nextPeriod','finishEarly','finish','ev','pick','oppSave','noteSave','evNew','evEdit','evSave','evDel','attSet','attAll','attMins','attEarly','attReason','sessNew','sessEdit','sessSave','sessDel','recMode','recDefault','pinAt','pinOwn','pinPos','pinSkip','pinEdit','pinsSet','pinsDefault','teamTap','capPick','capSet','capSkip','tapPlayer','tapBench','tapDo','tapOn','preset','fmt','prefill','formPick','luSel','luPitch','luPut','luList','injPick']);
+const EDIT_ACTS=new Set(['mdetOpen','mdetVenue','mdetSave','pinEdit','delMatchAsk','playerNew','playerEdit','playerRestore','playerSave','playerRemove','importOpen','importParse','importAdd','importBack','importDel','matchNew','venue','matchNext','backDetails','cancelMatch','role','reason','restSub','toLive','editLineup','ko','pause','resume','endPeriod','nextPeriod','finishEarly','finish','ev','pick','oppSave','noteSave','evNew','evEdit','evSave','evDel','attSet','attAll','attMins','attEarly','attReason','sessNew','sessEdit','sessSave','sessDel','recMode','recDefault','pinAt','pinOwn','pinPos','pinSkip','pinEdit','pinsSet','pinsDefault','teamTap','capPick','capSet','capSkip','tapPlayer','tapBench','tapDo','tapOn','preset','fmt','prefill','formPick','luSel','luPitch','luPut','luList','injPick']);
 function genCode(){const A='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';const b=new Uint8Array(8);(window.crypto||{getRandomValues:a=>{for(let i=0;i<a.length;i++)a[i]=Math.random()*256}}).getRandomValues(b);return Array.from(b,x=>A[x%A.length]).join('')}
 async function syncWait(){for(let i=0;i<30&&SYNC.busy;i++)await new Promise(r=>setTimeout(r,300));SYNC.state='idle';await syncNow(true)}
 async function refreshMembers(){
@@ -2734,10 +2749,17 @@ function actExtra(a,ds,el){
 
     case 'pstat':V.sheet={kind:'pstat',d:{id:ds.id}};renderSheet();return true;
     case 'settings':V.sheet={kind:'settings',d:{}};renderSheet();return true;
-    case 'pinAt':{const m=M();const e=pinEv(m,V.sheet.d.id);const L=window.LASTPT;if(!e||!L)return true;const r=el.getBoundingClientRect();const cl=(v,mx)=>+Math.max(0,Math.min(mx,v)).toFixed(1);pinSave(m,e,cl((L.x-r.left)/r.width*PW,PW),cl((L.y-r.top)/r.height*PH,PH));return true}
-    case 'pinOwn':{const m=M();pinSave(m,pinEv(m,V.sheet.d.id),34,60);return true}
-    case 'pinPos':{const m=M();const e=pinEv(m,V.sheet.d.id);const pid=V.sheet.d.step==='assist'?e.assistId:e.playerId;const xy=POSITIONS[posMap(m)[pid]];if(xy){const X=xy[0]/100*PW,Y=xy[1]/100*105;if(Y>PH)pinSave(m,e,34,60);else pinSave(m,e,+X.toFixed(1),+Y.toFixed(1))}return true}
-    case 'pinSkip':{const m=M();pinNext(m,pinEv(m,V.sheet.d.id));return true}
+    case 'pinAt':{const m=pinM();const e=pinEv(m,V.sheet.d.id);const L=window.LASTPT;if(!e||!L)return true;const r=el.getBoundingClientRect();const cl=(v,mx)=>+Math.max(0,Math.min(mx,v)).toFixed(1);pinSave(m,e,cl((L.x-r.left)/r.width*PW,PW),cl((L.y-r.top)/r.height*PH,PH));return true}
+    case 'pinOwn':{const m=pinM();pinSave(m,pinEv(m,V.sheet.d.id),34,60);return true}
+    case 'pinPos':{const m=pinM();const e=pinEv(m,V.sheet.d.id);const pid=V.sheet.d.step==='assist'?e.assistId:e.playerId;const xy=POSITIONS[posMap(m)[pid]];if(xy){const X=xy[0]/100*PW,Y=xy[1]/100*105;if(Y>PH)pinSave(m,e,34,60);else pinSave(m,e,+X.toFixed(1),+Y.toFixed(1))}return true}
+    case 'pinSkip':{const m=pinM();pinNext(m,pinEv(m,V.sheet.d.id));return true}
+    case 'mdetOpen':{const m=logMatch();if(!m)return true;V.sheet={kind:'mdet',d:{id:m.id,opp:m.opp||'',venue:m.venue||'home',location:m.location||'',comp:m.comp||'',referee:m.referee||'',date:m.date||'',time:m.time||'',periods:m.periods,periodMins:m.periodMins}};renderSheet();return true}
+    case 'mdetVenue':{V.sheet.d.venue=ds.v;renderSheet();return true}
+    case 'mdetSave':{const d=V.sheet.d;const m=S.matches.find(x=>x.id===d.id);if(!m)return true;
+      if(!String(d.opp||'').trim()){d.err='Enter the opposition.';renderSheet();return true}
+      const pr=+d.periods,pm=+d.periodMins;if(!(pr>=1&&pr<=4)||!(pm>=1&&pm<=120)){d.err='Periods 1 to 4, and 1 to 120 mins each.';renderSheet();return true}
+      Object.assign(m,{opp:d.opp.trim(),venue:d.venue,location:(d.location||'').trim(),comp:(d.comp||'').trim(),referee:(d.referee||'').trim(),date:d.date||m.date,time:d.time||'',periods:pr,periodMins:pm});
+      save();V.sheet={kind:'log'};render();return true}
     case 'pinEdit':V.sheet={kind:'where',d:{id:ds.id,step:'main',fromLog:true}};renderSheet();return true;
     case 'pinsSet':{const m=M();m.pins=ds.v==='on';DB.prefs.pins=m.pins;save();render();return true}
     case 'pinsDefault':DB.prefs.pins=ds.v==='on';save();render();return true;
