@@ -1248,8 +1248,10 @@ const compRank=c=>{const x=String(c).toLowerCase();
   if(/\bcup\b/.test(x)&&!/friendly/.test(x))return 2;
   if(/premier|premiership|championship|league|division|\bliga\b|serie/.test(x))return 1;
   return 9};
-const compsOf=()=>[...new Set(S.matches.filter(m=>m.status==='done'&&m.comp).map(m=>m.comp))].sort((a,b)=>compRank(a)-compRank(b)||a.localeCompare(b));
-const compOk=m=>!V.comp||m.comp===V.comp;
+const compNorm=c=>String(c||'').split(' - ')[0].replace(/\s*\(.*\)\s*$/,'').replace(/^UEFA\s+/i,'').trim();
+const proComps=()=>{try{return(CLOUD&&S.team&&S.team.proTeam)?PRO.matches.filter(m=>m.status==='finished'&&m.comp&&!proRecorded(m)).map(m=>compNorm(m.comp)):[]}catch(e){return []}};
+const compsOf=()=>[...new Set([...S.matches.filter(m=>m.status==='done'&&m.comp).map(m=>compNorm(m.comp)),...proComps()])].sort((a,b)=>compRank(a)-compRank(b)||a.localeCompare(b));
+const compOk=m=>!V.comp||compNorm(m.comp)===V.comp;
 function compBar(){
   const cs=compsOf();if(cs.length<2)return '';
   return `<div class="chips small tight scr" style="margin:6px 0">${['',...cs].map(c=>`<button class="${(V.comp||'')===c?'on':''}" data-act="compSet" data-v="${esc(c)}">${c?esc(c):'All competitions'}</button>`).join('')}</div>`;
@@ -1258,9 +1260,9 @@ const isGF=e=>e.t==='goal'&&e.how!=='Own goal';
 const isGA=e=>e.t==='oppgoal'||(e.t==='goal'&&e.how==='Own goal');
 /* form: oldest on the left, newest on the right, as many as fit on one line */
 function formItems(ms){
-  const t=S.team,pro=typeof CLOUD!=='undefined'&&CLOUD&&t&&t.proTeam&&typeof PRO!=='undefined'&&!V.comp;
+  const t=S.team,pro=typeof CLOUD!=='undefined'&&CLOUD&&t&&t.proTeam&&typeof PRO!=='undefined'&&true;
   const sameOpp=(pm,x)=>pm.match_date===x.date&&[pm.home,pm.away].some(n=>{const a=clubKey(n),c=clubKey(x.opp);return a&&c&&(a.includes(c)||c.includes(a))});
-  const fin=pro?PRO.matches.filter(m=>m.status==='finished'&&m.home_goals!=null):[];
+  const fin=pro?PRO.matches.filter(m=>m.status==='finished'&&m.home_goals!=null&&(!V.comp||compNorm(m.comp)===V.comp)):[];
   const it=[];
   ms.forEach(m=>{if(!fin.some(pm=>sameOpp(pm,m))){const x=score(m);it.push({d:m.date||'',t:m.time||'',us:x.us,them:x.them,opp:m.opp||''})}});
   if(pro){
@@ -3026,7 +3028,7 @@ function proUpcoming(){
 }
 function proMore(){
   const t=S.team;if(!CLOUD||!t||!t.proTeam)return '';
-  const done=PRO.matches.filter(m=>m.status==='finished'&&!proRecorded(m)&&(!V.comp||m.comp===V.comp)).sort((a,b)=>b.match_date.localeCompare(a.match_date));
+  const done=PRO.matches.filter(m=>m.status==='finished'&&!proRecorded(m)&&(!V.comp||compNorm(m.comp)===V.comp)).sort((a,b)=>b.match_date.localeCompare(a.match_date));
   return done.length?`<h2>${S.matches.some(m=>m.status==='done')?'More results':'Results'} · ${esc(t.proClub||'')}</h2><p class="note" style="margin-top:0">From the club's published results. Tap one for goals, cards and line-ups.</p>${done.map(proRow).join('')}`:'';
 }
 function proDetailView(m){
