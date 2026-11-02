@@ -531,7 +531,7 @@ function setCur(id){DB.cur=id;S=DB.teams[id]||EMPTY();V.tab='match';V.matchId=nu
 const V={lsel:null,prefill:'',luList:false,sortDir:0,tab:'match',step:'details',matchId:null,sess:null,sheet:null,imp:null,attMode:'sessions',sort:'num',
   auth:{mode:'in',email:'',password:'',name:'',invite:'',err:'',busy:false,sent:false},
   draft:{name:'',age:'',ground:'',primary:'#0b6b3a',secondary:'#ffffff',onPitch:11,periods:2,periodMins:45},err:''};
-const T=()=>S.team||V.draft;
+const T=()=>(V.newTeam||!S.team)?V.draft:S.team;
 const canEdit=()=>S.role==='coach';
 const M=()=>S.matches.find(m=>m.id===S.activeId)||null;
 const liveOther=()=>S.matches.find(m=>m.status==='live')||null;
