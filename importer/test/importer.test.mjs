@@ -42,6 +42,13 @@ test('postponed and live states are not marked finished', () => {
   assert.equal(parseMonth(html, '2026-05', 't').matches[0].status, 'live');
 });
 
+test('finished legs of a two-legged tie are finished, with the aggregate kept', () => {
+  const html = '<main><h3>Thursday 13th August</h3><h4>UEFA Conference League</h4><span>A 1 , B 1 at Full time , B win 3 - 2 on aggregate</span></main>';
+  const m = parseMonth(html, '2026-08', 't').matches[0];
+  assert.equal(m.status, 'finished');
+  assert.match(m.rawStatus, /on aggregate/);
+});
+
 test('a derby on both clubs pages merges into one row', () => {
   const a = parseMonth(page, '2026-10', 'rangers').matches;
   const b = parseMonth(page, '2026-10', 'heart-of-midlothian').matches.filter((m) => m.home === 'Heart of Midlothian');

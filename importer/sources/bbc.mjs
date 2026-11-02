@@ -48,7 +48,8 @@ function dateFor(day, monthName, ym) {
 
 function statusOf(raw) {
   const s = raw.toLowerCase();
-  if (s === 'full time') return 'finished';
+  // "Full time" can carry a note, e.g. "Full time , X win 3 - 2 on aggregate" for the second leg of a tie.
+  if (/^(full time|after extra time|after penalties|penalties)/.test(s)) return 'finished';
   if (/postpone|abandon|cancel|suspend/.test(s)) return 'other';
   return 'live';
 }
