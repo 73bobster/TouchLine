@@ -1,0 +1,31 @@
+name: Import favourite teams (dry run)
+# Fetches Rangers and Hearts fixtures/results from the chosen source and prints a report.
+# Dry run only: nothing is written to the database. Runs on pushes that change the importer, or by hand
+# (Actions tab > this workflow > Run workflow; tick "force" to ignore the 13:00-23:59 UK polling window).
+on:
+  push:
+    branches: [feature/favourite-teams-import]
+    paths: ['importer/import.mjs', 'importer/sources/**', 'importer/test/**', '.github/workflows/import-favourites.yml']
+  workflow_dispatch:
+    inputs:
+      source:
+        description: 'Source: bbc (default) or apifootball (paid plan, needs APIFOOTBALL_KEY)'
+        default: bbc
+      force:
+        description: 'Ignore the 13:00-23:59 UK polling window'
+        type: boolean
+        default: true
+permissions:
+  contents: read
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node --test importer/test/importer.test.mjs
+      - run: node importer/import.mjs --source "${{ inputs.source || 'bbc' }}" --from 2026-08 --to 2026-11 --sql importer/out/upsert.sql --force
+        env:
+          APIFOOTBALL_KEY: ${{ secrets.APIFOOTBALL_KEY }}
