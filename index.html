@@ -707,7 +707,17 @@ function teamFields(t){
    <label>On pitch<input type="number" inputmode="numeric" min="3" max="15" data-bind="team.onPitch" data-num="1" value="${t.onPitch}"></label>
    <label>Periods<select data-bind="team.periods" data-num="1">${[2,4,1].map(n=>`<option value="${n}" ${t.periods===n?'selected':''}>${n}</option>`).join('')}</select></label>
    <label>Mins each<input type="number" inputmode="numeric" min="5" max="60" data-bind="team.periodMins" data-num="1" value="${t.periodMins}"></label>
-  </div>`;
+  </div>${CLOUD?proFields(t):''}`;
+}
+function proStatus(t){
+  const f=t.proName?clubFind(t.proName):null;
+  if(!t.proName)return '<span class="note">Start typing a club and pick it from the list.</span>';
+  return f?`<span style="color:#1e8f4e;font-weight:700">✓ ${esc(f.name)}</span> · ${esc(f.league)}. Its fixtures and results will show on the Results screen.`:'<span style="color:var(--bad);font-weight:700">Not recognised.</span> Pick a UK professional club from the suggestions (English or Scottish, top four divisions).';
+}
+function proFields(t){
+  return `<div class="lbl">Professional club (optional)</div>
+  <button type="button" class="btn sec block" data-act="proFollow" aria-pressed="${t.proOn?'true':'false'}" style="justify-content:flex-start;text-align:left">${t.proOn?'☑':'☐'} This team is a professional club. Show its fixtures and results.</button>
+  ${t.proOn?`<label style="margin-top:8px">Club<input data-bind="team.proName" data-pro="1" list="proclubs" value="${esc(t.proName||'')}" placeholder="e.g. Rangers" autocomplete="off" autocapitalize="words"></label><datalist id="proclubs">${UK_CLUBS.map(c=>`<option value="${esc(c[0])}">${esc(c[1])}</option>`).join('')}</datalist><div class="note" id="prostat" style="margin-top:4px">${proStatus(t)}</div>`:''}`;
 }
 
 function teamView(){
@@ -1539,7 +1549,7 @@ function historyView(){
   if(V.matchId){const m=VM();if(m)return summaryView(m)}
   const ms=S.matches.filter(m=>m.status==='done'&&compOk(m)).sort((a,b)=>(b.date+b.time).localeCompare(a.date+a.time));
   const w=ms.filter(m=>score(m).us>score(m).them).length,d=ms.filter(m=>score(m).us===score(m).them).length,l=ms.length-w-d;
-  return header('Results',ms.length?`P${ms.length} · W${w} D${d} L${l}`:'')+`<main>${CLOUD?`<div class="prow" data-act="proOpenList" style="cursor:pointer"><div class="num">🏴</div><div class="nm">Pro games<small>Rangers and Hearts results, fixtures and line-ups</small></div><span style="color:var(--mute)">›</span></div>`:''}${formStrip(ms)}${compBar()}${seasonCard(ms)}${ms.length?`<div class="cols">${ms.map(resultCard).join('')}</div>`:'<div class="empty"><b>No finished matches yet</b>Record your first match and it will appear here.</div>'}</main>`;
+  return header('Results',ms.length?`P${ms.length} · W${w} D${d} L${l}`:'')+`<main>${proUpcoming()}${formStrip(ms)}${compBar()}${seasonCard(ms)}${ms.length?`<div class="cols">${ms.map(resultCard).join('')}</div>`:(S.team&&S.team.proTeam?'':'<div class="empty"><b>No finished matches yet</b>Record your first match and it will appear here.</div>')}${proMore()}</main>`;
 }
 
 function summaryView(m){
@@ -1816,11 +1826,12 @@ function act(a,ds,el){
   const m=M();
   if(actExtra(a,ds,el))return;
   switch(a){
-    case 'tab':V.top=1;V.ts=null;V.tab=ds.tab;V.matchId=null;V.sheet=null;V.sess=null;V.newTeam=false;break;
+    case 'tab':V.top=1;if(ds.tab==='history'&&S.team&&S.team.proTeam)setTimeout(()=>proLoad(),0);V.ts=null;V.tab=ds.tab;V.matchId=null;V.sheet=null;V.sess=null;V.newTeam=false;break;
     case 'createTeam':{
       const t=V.draft;if(!t.name.trim()){V.err='Give your team a name first.';break}
       V.err='';S.team=Object.assign({},t,{name:t.name.trim()});save();V.tab='squad';break}
     case 'preset':{const p=PRESETS[+ds.i];const t=T();t.primary=p[1];t.secondary=p[2];save();break}
+    case 'proFollow':{const t=T();t.proOn=!t.proOn;if(!t.proOn){t.proTeam='';t.proClub='';t.proName=''}else if(!t.proName){const f=clubFind(t.name);if(f){t.proName=f.name;t.proTeam=f.slug;t.proClub=f.name}}save();PRO.at=0;render();break}
     case 'fmt':{const f=FORMATS[+ds.i];const t=T();t.onPitch=f[1];t.periods=f[2];t.periodMins=f[3];save();break}
     case 'backup':V.sheet={kind:'share',title:'Backup',note:'Copy this and keep it somewhere safe, such as a note or an email to yourself. Use Restore to bring it back.',d:{text:JSON.stringify(S)}};renderSheet();return;
     case 'restoreOpen':V.sheet={kind:'restore',d:{text:''}};renderSheet();return;
@@ -1993,6 +2004,7 @@ document.addEventListener('input',e=>{
   if(el.dataset.num==='1')v=v===''?'':+v;
   if(el.type==='number'&&path.startsWith('imp.rows')&&v!=='')v=+v;
   setPath(path,v);
+  if(el.dataset.pro==='1'){const t=T();const f=clubFind(v);t.proTeam=f?f.slug:'';t.proClub=f?f.name:'';const ps=document.getElementById('prostat');if(ps)ps.innerHTML=proStatus(t)}
   if(path.startsWith('team.')){applyTheme();save();if(el.dataset.render==='crest'){const c=document.querySelector('.crest');if(c)c.outerHTML=crest(T(),+c.style.width.replace('px',''))}}
   else if(path.startsWith('m.'))save();
 });
@@ -2689,7 +2701,7 @@ function sheetExtra(s,m,d){
 }
 
 /* ---------- extra actions ---------- */
-const EDIT_ACTS=new Set(['mdetOpen','mdetVenue','mdetSave','pinEdit','delMatchAsk','playerNew','playerEdit','playerRestore','playerSave','playerRemove','importOpen','importParse','importAdd','importBack','importDel','matchNew','venue','matchNext','backDetails','cancelMatch','role','reason','restSub','toLive','editLineup','ko','pause','resume','endPeriod','nextPeriod','finishEarly','finish','ev','pick','oppSave','noteSave','evNew','evEdit','evSave','evDel','attSet','attAll','attMins','attEarly','attReason','sessNew','sessEdit','sessSave','sessDel','recMode','recDefault','pinAt','pinOwn','pinPos','pinSkip','pinEdit','pinsSet','pinsDefault','teamTap','capPick','capSet','capSkip','tapPlayer','tapBench','tapDo','tapOn','preset','fmt','prefill','formPick','luSel','luPitch','luPut','luList','injPick']);
+const EDIT_ACTS=new Set(['proFollow','mdetOpen','mdetVenue','mdetSave','pinEdit','delMatchAsk','playerNew','playerEdit','playerRestore','playerSave','playerRemove','importOpen','importParse','importAdd','importBack','importDel','matchNew','venue','matchNext','backDetails','cancelMatch','role','reason','restSub','toLive','editLineup','ko','pause','resume','endPeriod','nextPeriod','finishEarly','finish','ev','pick','oppSave','noteSave','evNew','evEdit','evSave','evDel','attSet','attAll','attMins','attEarly','attReason','sessNew','sessEdit','sessSave','sessDel','recMode','recDefault','pinAt','pinOwn','pinPos','pinSkip','pinEdit','pinsSet','pinsDefault','teamTap','capPick','capSet','capSkip','tapPlayer','tapBench','tapDo','tapOn','preset','fmt','prefill','formPick','luSel','luPitch','luPut','luList','injPick']);
 function genCode(){const A='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';const b=new Uint8Array(8);(window.crypto||{getRandomValues:a=>{for(let i=0;i<a.length;i++)a[i]=Math.random()*256}}).getRandomValues(b);return Array.from(b,x=>A[x%A.length]).join('')}
 async function syncWait(){for(let i=0;i<30&&SYNC.busy;i++)await new Promise(r=>setTimeout(r,300));SYNC.state='idle';await syncNow(true)}
 async function refreshMembers(){
@@ -2862,19 +2874,28 @@ function actExtra(a,ds,el){
   return false;
 }
 
-/* ---------- pro games (Rangers, Hearts): read-only, from the importer's tables ---------- */
+/* ---------- professional team a team follows (set in Team, shown on Results) ---------- */
+const UK_CLUBS=[["Aberdeen","Scottish Premiership"],["Accrington Stanley","League Two"],["AFC Wimbledon","League One"],["Airdrieonians","Scottish Championship"],["Albion Rovers","Scottish League Two"],["Alloa Athletic","Scottish League One"],["Annan Athletic","Scottish League One"],["Arbroath","Scottish Championship"],["Arsenal","Premier League"],["Aston Villa","Premier League"],["Ayr United","Scottish Championship"],["Barnet","League Two"],["Barnsley","League One"],["Barrow","League Two"],["Birmingham City","Championship"],["Blackburn Rovers","Championship"],["Blackpool","League One"],["Bolton Wanderers","League One"],["Bonnyrigg Rose Athletic","Scottish League Two"],["Bournemouth","Premier League"],["Bradford City","League One"],["Brechin City","Scottish League Two"],["Brentford","Premier League"],["Brighton & Hove Albion","Premier League"],["Bristol City","Championship"],["Bristol Rovers","League One"],["Bromley","League Two"],["Burnley","Premier League"],["Burton Albion","League One"],["Cambridge United","League One"],["Cardiff City","Championship"],["Carlisle United","League Two"],["Celtic","Scottish Premiership"],["Charlton Athletic","Championship"],["Chelsea","Premier League"],["Cheltenham Town","League Two"],["Chesterfield","League Two"],["Clyde","Scottish League One"],["Colchester United","League Two"],["Cove Rangers","Scottish Championship"],["Coventry City","Championship"],["Cowdenbeath","Scottish League Two"],["Crawley Town","League One"],["Crewe Alexandra","League Two"],["Crystal Palace","Premier League"],["Derby County","Championship"],["Doncaster Rovers","League One"],["Dumbarton","Scottish League One"],["Dundee","Scottish Premiership"],["Dundee United","Scottish Premiership"],["Dunfermline Athletic","Scottish Championship"],["East Fife","Scottish League One"],["East Kilbride","Scottish League Two"],["Edinburgh City","Scottish League Two"],["Elgin City","Scottish League Two"],["Everton","Premier League"],["Exeter City","League One"],["Falkirk","Scottish Premiership"],["Fleetwood Town","League One"],["Forest Green Rovers","League Two"],["Forfar Athletic","Scottish League Two"],["Fulham","Premier League"],["Gillingham","League Two"],["Greenock Morton","Scottish Championship"],["Grimsby Town","League Two"],["Hamilton Academical","Scottish Championship"],["Harrogate Town","League Two"],["Heart of Midlothian","Scottish Premiership"],["Hibernian","Scottish Premiership"],["Huddersfield Town","League One"],["Hull City","Championship"],["Inverness Caledonian Thistle","Scottish Championship"],["Ipswich Town","Premier League"],["Kelty Hearts","Scottish League One"],["Kilmarnock","Scottish Premiership"],["Leeds United","Premier League"],["Leicester City","Premier League"],["Leyton Orient","League One"],["Lincoln City","League One"],["Liverpool","Premier League"],["Livingston","Scottish Premiership"],["Luton Town","Championship"],["Manchester City","Premier League"],["Manchester United","Premier League"],["Mansfield Town","League One"],["Middlesbrough","Championship"],["Millwall","Championship"],["Milton Keynes Dons","League Two"],["Montrose","Scottish League One"],["Morecambe","League Two"],["Motherwell","Scottish Premiership"],["Newcastle United","Premier League"],["Newport County","League Two"],["Northampton Town","League One"],["Norwich City","Championship"],["Nottingham Forest","Premier League"],["Notts County","League Two"],["Oldham Athletic","League Two"],["Oxford United","Championship"],["Partick Thistle","Scottish Championship"],["Peterborough United","League One"],["Peterhead","Scottish League One"],["Plymouth Argyle","Championship"],["Port Vale","League One"],["Portsmouth","Championship"],["Preston North End","Championship"],["Queen of the South","Scottish Championship"],["Queen's Park","Scottish Championship"],["Queens Park Rangers","Championship"],["Raith Rovers","Scottish Championship"],["Rangers","Scottish Premiership"],["Reading","League One"],["Rochdale","League Two"],["Ross County","Scottish Premiership"],["Rotherham United","League One"],["Salford City","League Two"],["Sheffield United","Championship"],["Sheffield Wednesday","Championship"],["Shrewsbury Town","League One"],["Southampton","Premier League"],["Southend United","League Two"],["Spartans","Scottish League Two"],["St Johnstone","Scottish Premiership"],["St Mirren","Scottish Premiership"],["Stenhousemuir","Scottish League One"],["Stevenage","League One"],["Stirling Albion","Scottish League One"],["Stockport County","League One"],["Stoke City","Championship"],["Stranraer","Scottish League One"],["Sunderland","Premier League"],["Sutton United","League Two"],["Swansea City","Championship"],["Swindon Town","League Two"],["Tottenham Hotspur","Premier League"],["Tranmere Rovers","League Two"],["Walsall","League Two"],["Watford","Championship"],["West Bromwich Albion","Championship"],["West Ham United","Premier League"],["Wigan Athletic","League One"],["Wolverhampton Wanderers","Premier League"],["Wrexham","Championship"],["Wycombe Wanderers","League One"]];
+const CLUB_ALIAS={'hearts':'Heart of Midlothian','spurs':'Tottenham Hotspur','tottenham':'Tottenham Hotspur','man utd':'Manchester United','man united':'Manchester United','man city':'Manchester City','wolves':'Wolverhampton Wanderers','brighton':'Brighton & Hove Albion','newcastle':'Newcastle United','west ham':'West Ham United','leeds':'Leeds United','forest':'Nottingham Forest','qpr':'Queens Park Rangers','west brom':'West Bromwich Albion','sheff utd':'Sheffield United','sheff wed':'Sheffield Wednesday','mk dons':'Milton Keynes Dons','wimbledon':'AFC Wimbledon','hamilton':'Hamilton Academical','inverness':'Inverness Caledonian Thistle','st johnstone':'St Johnstone','saints':'Southampton'};
+const clubKey=n=>String(n||'').toLowerCase().replace(/&/g,'and').replace(/[^a-z0-9 ]/g,'').replace(/\b(fc|afc)\b/g,'').replace(/\s+/g,' ').trim();
+const clubSlug=n=>String(n||'').toLowerCase().replace(/&/g,'and').replace(/['’.]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
+function clubFind(txt){const k=clubKey(txt);if(!k)return null;const a=CLUB_ALIAS[k];const hit=UK_CLUBS.find(c=>clubKey(c[0])===k||(a&&c[0]===a)||(k.length>3&&clubKey(c[0])===k.replace(/ (united|city|town)$/,'')));return hit?{name:hit[0],league:hit[1],slug:clubSlug(hit[0])}:null}
+
+/* ---------- pro games: read-only, from the importer's tables ---------- */
 const PROKEY='touchline-pro-v1';
 const PRO=(()=>{let o={};try{o=JSON.parse(localStorage.getItem(PROKEY)||'{}')}catch(e){}return Object.assign({matches:[],detail:{},at:0,filter:'all',ref:null,busy:false,err:''},o,{busy:false,err:'',ref:null})})();
-const proSave=()=>{try{localStorage.setItem(PROKEY,JSON.stringify({matches:PRO.matches,detail:PRO.detail,at:PRO.at,filter:PRO.filter}))}catch(e){}};
+const proSave=()=>{try{localStorage.setItem(PROKEY,JSON.stringify({matches:PRO.matches,detail:PRO.detail,at:PRO.at,filter:PRO.filter,slug:PRO.slug}))}catch(e){}};
 const PROTEAMS={rangers:'Rangers','heart-of-midlothian':'Hearts'};
 const proDate=d=>{try{return new Date(d+'T12:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short',year:'numeric'})}catch(e){return d}};
 const proKey=m=>m.source_ref;
 async function proLoad(force){
-  if(!CLOUD||!DB.user||PRO.busy)return;
+  const slug=S.team&&S.team.proTeam;
+  if(!CLOUD||!DB.user||PRO.busy||!slug)return;
+  if(PRO.slug!==slug){PRO.slug=slug;PRO.matches=[];PRO.at=0}
   if(!force&&PRO.at&&Date.now()-PRO.at<300000)return;
   PRO.busy=true;PRO.err='';render();
   try{
-    PRO.matches=await rest('GET','/pro_matches?select=source,source_ref,teams,comp,match_date,kickoff,home,away,home_goals,away_goals,status,raw_status,venue,attendance,referee,home_manager,away_manager,home_formation,away_formation,detail_fetched_at&order=match_date.asc&limit=500')||[];
+    PRO.matches=await rest('GET','/pro_matches?select=source,source_ref,teams,comp,match_date,kickoff,home,away,home_goals,away_goals,status,raw_status,venue,attendance,referee,home_manager,away_manager,home_formation,away_formation,detail_fetched_at&teams=cs.%7B'+encodeURIComponent(slug)+'%7D&order=match_date.asc&limit=500')||[];
     PRO.at=Date.now();proSave();
   }catch(e){PRO.err=navigator.onLine?(e.status===401||e.code==='auth'?'Sign in again to load these games.':'Could not load games ('+e.message+').'):'You are offline.'}
   PRO.busy=false;render();
@@ -2893,26 +2914,32 @@ async function proDetail(m){
 function proRow(m){
   const fin=m.status==='finished',sc=fin?`${m.home_goals}–${m.away_goals}`:(m.kickoff?String(m.kickoff).slice(0,5):'v');
   const tm=(m.teams||[]).map(t=>PROTEAMS[t]||t).join(' & ');
-  return `<div class="prow" data-act="proOpen" data-id="${esc(proKey(m))}" style="cursor:pointer"><div class="num" style="font-size:${fin?17:14}px;width:54px">${esc(sc)}</div><div class="nm">${esc(m.home)} v ${esc(m.away)}<small>${esc(m.comp||'')} · ${esc(proDate(m.match_date))}${m.status==='live'?' · live':m.status==='other'?' · '+esc(m.raw_status||''):''}</small></div><span style="color:var(--mute)" class="stat">${esc(tm)}</span><span style="color:var(--mute)">›</span></div>`;
+  return `<div class="prow" data-act="proOpen" data-id="${esc(proKey(m))}" style="cursor:pointer"><div class="num" style="font-size:${fin?17:14}px;width:54px">${esc(sc)}</div><div class="nm">${esc(m.home)} v ${esc(m.away)}<small>${esc(m.comp||'')} · ${esc(proDate(m.match_date))}${m.status==='live'?' · live':m.status==='other'?' · '+esc(m.raw_status||''):''}</small></div><span style="color:var(--mute)">›</span></div>`;
 }
-function proList(){
-  const f=PRO.filter,all=PRO.matches.filter(m=>f==='all'||(m.teams||[]).includes(f));
+const proSideKey=n=>clubKey(n);
+function proRecorded(pm){return S.matches.some(x=>x.date===pm.match_date&&[pm.home,pm.away].some(n=>{const a=proSideKey(n),b=proSideKey(x.opp);return a&&b&&(a.includes(b)||b.includes(a))}))}
+function proStatusLine(){
+  if(!CLOUD||!S.team||!S.team.proTeam)return '';
+  if(PRO.err)return `<div class="err">${esc(PRO.err)}</div>`;
+  return '';
+}
+function proUpcoming(){
+  const t=S.team;if(!CLOUD||!t||!t.proTeam)return '';
   const today=todayStr();
-  const next=all.filter(m=>m.status!=='finished'&&m.match_date>=today).sort((a,b)=>(a.match_date+(a.kickoff||'')).localeCompare(b.match_date+(b.kickoff||'')));
-  const done=all.filter(m=>!next.includes(m)).sort((a,b)=>b.match_date.localeCompare(a.match_date));
-  const chips=`<div class="chips small">${[['all','Both'],['rangers','Rangers'],['heart-of-midlothian','Hearts']].map(([k,l])=>`<button class="${f===k?'on':''}" data-act="proFilter" data-val="${k}">${l}</button>`).join('')}</div>`;
-  let body='';
-  if(!CLOUD)body='<div class="empty"><b>Sign in to see these</b>Rangers and Hearts games are loaded from your account, so they are not available in no-account mode.</div>';
-  else if(!PRO.matches.length)body=PRO.busy?'<div class="empty"><b>Loading…</b></div>':`<div class="empty"><b>No games yet</b>${esc(PRO.err||'Nothing has been imported yet.')}</div>`;
-  else body=(PRO.err?`<div class="err">${esc(PRO.err)}</div>`:'')+(next.length?`<h2>Coming up</h2>${next.map(proRow).join('')}`:'')+(done.length?`<h2>Results</h2>${done.map(proRow).join('')}`:'')+(all.length?'':'<div class="empty"><b>No games</b></div>');
-  const upd=PRO.at?`Updated ${new Date(PRO.at).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}`:'';
-  return header('Pro games',upd)+`<main>${chips}${body}<div class="row"><button class="btn sec" data-act="proRefresh"${PRO.busy?' disabled':''}>${PRO.busy?'Loading…':'Refresh'}</button><button class="btn sec" data-act="proBack">‹ Results</button></div><p class="note">Results and line-ups from BBC Sport, updated hourly from 1pm to midnight UK time.</p></main>`;
+  const next=PRO.matches.filter(m=>m.status!=='finished'&&m.match_date>=today&&!proRecorded(m)).sort((a,b)=>(a.match_date+(a.kickoff||'')).localeCompare(b.match_date+(b.kickoff||'')));
+  const body=next.length?next.slice(0,6).map(proRow).join(''):(PRO.busy?'<div class="note">Loading fixtures…</div>':`<div class="note">${esc(PRO.matches.length||PRO.at?'No upcoming fixtures found.':'No fixtures yet for '+(t.proClub||'this club')+'. They appear once the importer has run for it.')}</div>`);
+  return `${proStatusLine()}<h2 style="margin-top:0">Coming up · ${esc(t.proClub||'')}</h2>${body}`;
+}
+function proMore(){
+  const t=S.team;if(!CLOUD||!t||!t.proTeam)return '';
+  const done=PRO.matches.filter(m=>m.status==='finished'&&!proRecorded(m)&&(!V.comp||m.comp===V.comp)).sort((a,b)=>b.match_date.localeCompare(a.match_date));
+  return done.length?`<h2>${S.matches.some(m=>m.status==='done')?'More results':'Results'} · ${esc(t.proClub||'')}</h2><p class="note" style="margin-top:0">From the club's published results. Tap one for goals, cards and line-ups.</p>${done.map(proRow).join('')}`:'';
 }
 function proDetailView(m){
   const d=PRO.detail[proKey(m)];const fin=m.status==='finished';
   const meta=[m.comp,proDate(m.match_date),m.venue,m.attendance?m.attendance.toLocaleString('en-GB')+' attended':'',m.referee?'Ref: '+m.referee:''].filter(Boolean).join(' · ');
   const nm=s=>s==='home'?m.home:m.away;
-  const hdr=`<header class="top"><div class="hrow"><button data-act="proClose" style="background:rgba(255,255,255,.2);color:var(--pt);min-width:44px;padding:0">‹</button><div style="flex:1"><h1>Pro game</h1><div class="sub">${esc(proDate(m.match_date))}</div></div></div></header>`;
+  const hdr=`<header class="top"><div class="hrow"><button data-act="proClose" style="background:rgba(255,255,255,.2);color:var(--pt);min-width:44px;padding:0">‹</button><div style="flex:1;min-width:0">${S.team?`<div class="tn">${esc(S.team.name)}</div>`:''}<h1>Pro game</h1><div class="sub">${esc(proDate(m.match_date))}</div></div></div></header>`;
   const hero=`<div class="hero"><span class="res">${fin?'Full time':m.status==='live'?'Live':m.status==='other'?esc(m.raw_status||'Not played'):'Kick-off '+esc(String(m.kickoff||'').slice(0,5)||'TBC')}</span><div class="big">${fin?`${m.home_goals} – ${m.away_goals}`:'v'}</div><div style="font-weight:700">${esc(m.home)} v ${esc(m.away)}</div><div class="meta">${esc(meta)}</div></div>`;
   if(!d)return hdr+`<main>${hero}${PRO.err?`<div class="err">${esc(PRO.err)}</div>`:''}${fin?`<div class="empty">${PRO.busy?'<b>Loading…</b>':'<b>Detail not on this device</b>Connect to the internet to load goals, cards and line-ups.'}</div>`:'<div class="empty">Line-ups and events appear after the game.</div>'}</main>`;
   const ev=d.events;
@@ -2932,16 +2959,12 @@ function proDetailView(m){
 }
 function proView(){
   const m=PRO.ref&&PRO.matches.find(x=>proKey(x)===PRO.ref);
-  return m?proDetailView(m):proList();
+  return m?proDetailView(m):historyView();
 }
 function proAct(a,ds){
   switch(a){
-    case 'proOpenList':V.top=1;V.tab='pro';PRO.ref=null;PRO.err='';render();proLoad();return true;
-    case 'proBack':V.top=1;V.tab='history';render();return true;
-    case 'proFilter':PRO.filter=ds.val;proSave();render();return true;
-    case 'proRefresh':proLoad(true);return true;
-    case 'proOpen':{const m=PRO.matches.find(x=>proKey(x)===ds.id);if(!m)return true;PRO.ref=ds.id;PRO.err='';V.top=1;render();if(m.status==='finished'&&!PRO.detail[ds.id])proDetail(m);return true}
-    case 'proClose':PRO.ref=null;PRO.err='';V.top=1;render();return true;
+    case 'proOpen':{const m=PRO.matches.find(x=>proKey(x)===ds.id);if(!m)return true;V.tab='pro';PRO.ref=ds.id;PRO.err='';V.top=1;render();if(m.status==='finished'&&!PRO.detail[ds.id])proDetail(m);return true}
+    case 'proClose':PRO.ref=null;PRO.err='';V.tab='history';V.top=1;render();return true;
   }
   return false;
 }
