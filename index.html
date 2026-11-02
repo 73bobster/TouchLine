@@ -757,7 +757,8 @@ function noMatch(){
   return header('Match',S.team.name)+`<main>
   ${other?`<div class="card"><b>Match in progress: v ${esc(other.opp)}</b><div class="note">Started on another device or earlier.</div><button class="btn block" data-act="continueLive" data-id="${other.id}">Continue recording</button></div>`:''}
   ${CLOUD&&S.team.proTeam?`<div class="note" style="margin:0 0 10px">Fixtures, results and line-ups for ${esc(S.team.proClub||'this club')} fill in automatically from the feed. Record a match yourself only if you want your own detail.</div>`:''}
-  ${n<2?`<div class="card"><b>Add your squad first</b><div class="note">You need players in the squad before you can pick a team.</div><button class="btn block" data-act="tab" data-tab="squad">Go to Squad</button></div>`:''}
+  ${n<2&&CLOUD&&S.team.proTeam?`<div class="card"><b>Squad not loaded yet</b><div class="note">The feed gives line-ups game by game, not a squad list. This reads the club's latest line-up into your Squad.</div><button class="btn block" data-act="proSquad" ${PRO.busy?'disabled':''}>${PRO.busy?'Reading line-up…':'Fill squad from the latest line-up'}</button></div>`:''}
+  ${n<2&&!(CLOUD&&S.team.proTeam)?`<div class="card"><b>Add your squad first</b><div class="note">You need players in the squad before you can pick a team.</div><button class="btn block" data-act="tab" data-tab="squad">Go to Squad</button></div>`:''}
   <button class="btn block lg" data-act="matchNew" ${n<2?'disabled':''}>+ New match</button>
   <button class="btn sec block" data-act="wbOpen" style="margin-top:10px">🧑‍🏫 Whiteboard</button>
   ${last?`<h2>Last result</h2>${resultCard(last)}`:''}
@@ -1862,7 +1863,7 @@ function act(a,ds,el){
   const m=M();
   if(actExtra(a,ds,el))return;
   switch(a){
-    case 'tab':V.top=1;if(ds.tab==='history'&&S.team&&S.team.proTeam)setTimeout(()=>proLoad(),0);V.ts=null;V.tab=ds.tab;V.matchId=null;V.sheet=null;V.sess=null;V.newTeam=false;break;
+    case 'tab':V.top=1;if((ds.tab==='history'||ds.tab==='match'||ds.tab==='squad')&&S.team&&S.team.proTeam)setTimeout(()=>proLoad(),0);V.ts=null;V.tab=ds.tab;V.matchId=null;V.sheet=null;V.sess=null;V.newTeam=false;break;
     case 'createTeam':{
       const t=V.draft;if(!t.name.trim()){V.err='Give your team a name first.';break}
       V.err='';S.team=Object.assign({},t,{name:t.name.trim()});save();V.tab='squad';break}
@@ -2972,14 +2973,16 @@ async function proLoad(force){
   const slug=S.team&&S.team.proTeam;
   if(!CLOUD||!DB.user||PRO.busy||!slug)return;
   if(PRO.slug!==slug){PRO.slug=slug;PRO.matches=[];PRO.at=0}
-  if(!force&&PRO.at&&Date.now()-PRO.at<300000)return;
-  PRO.busy=true;PRO.err='';render();
+  if(!force&&PRO.at&&Date.now()-PRO.at<300000){proAutoSquad();return}
+  PRO.busy=true;PRO.err='';PRO.tried=slug;render();
   try{
     PRO.matches=await rest('GET','/pro_matches?select=source,source_ref,teams,comp,match_date,kickoff,home,away,home_goals,away_goals,status,raw_status,venue,attendance,referee,home_manager,away_manager,home_formation,away_formation,detail_fetched_at&teams=cs.%7B'+encodeURIComponent(slug)+'%7D&order=match_date.asc&limit=500')||[];
     PRO.at=Date.now();proSave();
   }catch(e){PRO.err=navigator.onLine?(e.status===401||e.code==='auth'?'Sign in again to load these games.':'Could not load games ('+e.message+').'):'You are offline.'}
   PRO.busy=false;render();
+  proAutoSquad();
 }
+function proAutoSquad(){const t=S.team;if(t&&t.proTeam&&PRO.slug===t.proTeam&&canEdit()&&activePlayers().length<2&&!t.proAuto&&PRO.matches.some(m=>m.status==='finished')){t.proAuto=true;proFillSquad(true)}}
 async function proDetail(m){
   const k=proKey(m);
   if(!CLOUD||!DB.user||PRO.busy)return;
@@ -3055,10 +3058,10 @@ function proView(){
   return m?proDetailView(m):historyView();
 }
 const POSMAP=p=>{const x=String(p||'').toLowerCase();return /goalkeeper|keeper/.test(x)?'GK':/back|defend/.test(x)?'DEF':/midfield/.test(x)?'MID':/striker|forward|winger|attack(er)?$/.test(x)?'FWD':''};
-async function proFillSquad(){
+async function proFillSquad(quiet){
   const t=S.team;if(!t||!t.proTeam||PRO.busy)return;
   const ck=clubKey(t.proClub);const fin=PRO.matches.filter(m=>m.status==='finished').sort((a,b)=>b.match_date.localeCompare(a.match_date));
-  if(!fin.length){toast('No games imported for this club yet. Try again after the next feed.');return}
+  if(!fin.length){if(!quiet)toast('No games imported for this club yet. Try again after the next feed.');return}
   PRO.busy=true;render();let got=null;
   try{
     for(const m of fin.slice(0,6)){
@@ -3069,7 +3072,7 @@ async function proFillSquad(){
     }
   }catch(e){PRO.busy=false;render();toast('Could not read the line-up ('+e.message+').');return}
   PRO.busy=false;
-  if(!got){render();toast('No line-ups published yet for this club.');return}
+  if(!got){render();if(!quiet)toast('No line-ups published yet for this club.');return}
   let n=0;const have=activePlayers();
   got.forEach(p=>{
     const num=+p.num,name=String(p.name||'').trim();
@@ -3092,6 +3095,7 @@ function proAct(a,ds){
 /* ---------- render ---------- */
 function render(){
   applyTheme();
+  try{if(CLOUD&&DB.user&&S&&S.team&&S.team.proTeam&&PRO.tried!==S.team.proTeam&&!PRO.busy)setTimeout(()=>proLoad(),0)}catch(e){}
   try{repairMatches()}catch(e){}
   const app=$('#app');
   const bd=document.body.dataset;
