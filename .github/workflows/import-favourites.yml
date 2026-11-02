@@ -43,7 +43,7 @@ jobs:
           if [ "${{ github.event_name }}" = "schedule" ]; then
             node importer/import.mjs --source bbc --details recent --sql importer/out/upsert.sql
           else
-            node importer/import.mjs --source "${{ inputs.source || 'bbc' }}" --from 2026-08 --to 2026-11 --details all --sql importer/out/upsert.sql --force
+            node importer/import.mjs --source "${{ inputs.source || 'bbc' }}" --from 2026-07 --to 2026-11 --details all --sql importer/out/upsert.sql --force
           fi
         env:
           APIFOOTBALL_KEY: ${{ secrets.APIFOOTBALL_KEY }}
