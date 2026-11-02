@@ -1241,9 +1241,24 @@ function compBar(){
 const isGF=e=>e.t==='goal'&&e.how!=='Own goal';
 const isGA=e=>e.t==='oppgoal'||(e.t==='goal'&&e.how==='Own goal');
 /* form: oldest on the left, newest on the right, as many as fit on one line */
+function formItems(ms){
+  const t=S.team,pro=typeof CLOUD!=='undefined'&&CLOUD&&t&&t.proTeam&&typeof PRO!=='undefined'&&!V.comp;
+  const sameOpp=(pm,x)=>pm.match_date===x.date&&[pm.home,pm.away].some(n=>{const a=clubKey(n),c=clubKey(x.opp);return a&&c&&(a.includes(c)||c.includes(a))});
+  const fin=pro?PRO.matches.filter(m=>m.status==='finished'&&m.home_goals!=null):[];
+  const it=[];
+  ms.forEach(m=>{if(!fin.some(pm=>sameOpp(pm,m))){const x=score(m);it.push({d:m.date||'',t:m.time||'',us:x.us,them:x.them,opp:m.opp||''})}});
+  if(pro){
+    const ck=clubKey(t.proClub);
+    fin.forEach(m=>{
+      const home=clubKey(m.home)===ck||(ck&&clubKey(m.home).includes(ck));
+      it.push({d:m.match_date,t:String(m.kickoff||'').slice(0,5),us:home?m.home_goals:m.away_goals,them:home?m.away_goals:m.home_goals,opp:home?m.away:m.home})});
+  }
+  return it.sort((a,b)=>(b.d+b.t).localeCompare(a.d+a.t));
+}
 function formStrip(ms){
-  if(!ms.length)return '';
-  const sq=ms.slice().reverse().map(m=>{const x=score(m);const r=x.us>x.them?'w':x.us===x.them?'d':'l';return `<i class="${r}" title="${esc(m.opp||'')} ${x.us}-${x.them}">${r.toUpperCase()}</i>`}).join('');
+  const it=formItems(ms);
+  if(!it.length)return '';
+  const sq=it.slice().reverse().map(x=>{const r=x.us>x.them?'w':x.us===x.them?'d':'l';return `<i class="${r}" title="${esc(x.opp)} ${x.us}-${x.them}">${r.toUpperCase()}</i>`}).join('');
   return `<div class="formstrip" aria-label="Recent results, oldest first">${sq}</div>`;
 }
 /* size the pitch / buttons so the whole live screen, down to the last line, fits above the tab bar */
@@ -2912,10 +2927,21 @@ async function proDetail(m){
   }catch(e){PRO.err=navigator.onLine?'Could not load the game detail ('+e.message+').':'You are offline, and this game has not been saved on this device yet.'}
   PRO.busy=false;render();
 }
+function proRound(m){
+  const c=String(m.comp||'');const i=c.indexOf(' - ');if(i<0)return '';
+  const base=c.slice(0,i).trim(),ex=c.slice(i+3).trim();
+  if(/phase|stage|league|group|regular/i.test(ex)&&!/cup|final/i.test(ex)){
+    const same=PRO.matches.filter(x=>String(x.comp||'').split(' - ')[0].trim()===base&&x.status!=='other').sort((a,b)=>(a.match_date+(a.kickoff||'')).localeCompare(b.match_date+(b.kickoff||'')));
+    const n=same.findIndex(x=>proKey(x)===proKey(m));
+    return n>=0?'Matchday '+(n+1):'';
+  }
+  return ex;
+}
+const proComp=m=>{const b=String(m.comp||'').split(' - ')[0].trim(),r=proRound(m);return [b,r].filter(Boolean).join(' · ')};
 function proRow(m){
   const fin=m.status==='finished',sc=fin?`${m.home_goals}–${m.away_goals}`:(m.kickoff?String(m.kickoff).slice(0,5):'v');
   const tm=(m.teams||[]).map(t=>PROTEAMS[t]||t).join(' & ');
-  return `<div class="prow" data-act="proOpen" data-id="${esc(proKey(m))}" style="cursor:pointer"><div class="num" style="font-size:${fin?17:14}px;width:54px">${esc(sc)}</div><div class="nm">${esc(m.home)} v ${esc(m.away)}<small>${esc(m.comp||'')} · ${esc(proDate(m.match_date))}${m.status==='live'?' · live':m.status==='other'?' · '+esc(m.raw_status||''):''}</small></div><span style="color:var(--mute)">›</span></div>`;
+  return `<div class="prow" data-act="proOpen" data-id="${esc(proKey(m))}" style="cursor:pointer"><div class="num" style="font-size:${fin?17:14}px;width:54px">${esc(sc)}</div><div class="nm">${esc(m.home)} v ${esc(m.away)}<small>${esc(proComp(m))} · ${esc(proDate(m.match_date))}${m.status==='live'?' · live':m.status==='other'?' · '+esc(m.raw_status||''):''}</small></div><span style="color:var(--mute)">›</span></div>`;
 }
 const proSideKey=n=>clubKey(n);
 function proRecorded(pm){return S.matches.some(x=>x.date===pm.match_date&&[pm.home,pm.away].some(n=>{const a=proSideKey(n),b=proSideKey(x.opp);return a&&b&&(a.includes(b)||b.includes(a))}))}
@@ -2938,10 +2964,12 @@ function proMore(){
 }
 function proDetailView(m){
   const d=PRO.detail[proKey(m)];const fin=m.status==='finished';
-  const meta=[m.comp,proDate(m.match_date),m.venue,m.attendance?m.attendance.toLocaleString('en-GB')+' attended':'',m.referee?'Ref: '+m.referee:''].filter(Boolean).join(' · ');
+  const meta=[proComp(m),proDate(m.match_date)].filter(Boolean).join(' · ');
+  const facts=[['Venue',m.venue],['Attendance',m.attendance?m.attendance.toLocaleString('en-GB'):''],['Referee',m.referee],['Round / matchday',proRound(m)]].filter(f=>f[1]);
+  const factsHtml=facts.length?`<div class="card" style="padding:6px 14px">${facts.map(f=>`<div class="irow"><span class="stat" style="width:130px">${f[0]}</span><b style="font-weight:600">${esc(f[1])}</b></div>`).join('')}</div>`:'';
   const nm=s=>s==='home'?m.home:m.away;
   const hdr=`<header class="top"><div class="hrow"><button data-act="proClose" style="background:rgba(255,255,255,.2);color:var(--pt);min-width:44px;padding:0">‹</button><div style="flex:1;min-width:0">${S.team?`<div class="tn">${esc(S.team.name)}</div>`:''}<h1>Pro game</h1><div class="sub">${esc(proDate(m.match_date))}</div></div></div></header>`;
-  const hero=`<div class="hero"><span class="res">${fin?'Full time':m.status==='live'?'Live':m.status==='other'?esc(m.raw_status||'Not played'):'Kick-off '+esc(String(m.kickoff||'').slice(0,5)||'TBC')}</span><div class="big">${fin?`${m.home_goals} – ${m.away_goals}`:'v'}</div><div style="font-weight:700">${esc(m.home)} v ${esc(m.away)}</div><div class="meta">${esc(meta)}</div></div>`;
+  const hero=`<div class="hero"><span class="res">${fin?'Full time':m.status==='live'?'Live':m.status==='other'?esc(m.raw_status||'Not played'):'Kick-off '+esc(String(m.kickoff||'').slice(0,5)||'TBC')}</span><div class="big">${fin?`${m.home_goals} – ${m.away_goals}`:'v'}</div><div style="font-weight:700">${esc(m.home)} v ${esc(m.away)}</div><div class="meta">${esc(meta)}</div></div>${factsHtml}`;
   if(!d)return hdr+`<main>${hero}${PRO.err?`<div class="err">${esc(PRO.err)}</div>`:''}${fin?`<div class="empty">${PRO.busy?'<b>Loading…</b>':'<b>Detail not on this device</b>Connect to the internet to load goals, cards and line-ups.'}</div>`:'<div class="empty">Line-ups and events appear after the game.</div>'}</main>`;
   const ev=d.events;
   const row=(e,txt)=>`<div class="irow"><b>${e.minute}'</b><span>${txt}</span></div>`;
