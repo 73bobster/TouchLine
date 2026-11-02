@@ -1,5 +1,5 @@
 // Touchline PoC service worker: cache the app shell so it opens with no signal.
-const CACHE = 'touchline-poc-v22';
+const CACHE = 'touchline-poc-v23';
 const ASSETS = ['./', 'index.html', 'manifest.json', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png'];
 
 self.addEventListener('install', e => {
