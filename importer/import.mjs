@@ -84,6 +84,7 @@ async function main() {
   const rows = merge(all);
   const odd = rows.filter((r) => r.status === 'other' || r.status === 'live');
   note(`\n${rows.length} unique match(es) after merging; ${rows.filter((r) => r.status === 'finished').length} finished, ${rows.filter((r) => r.status === 'scheduled').length} scheduled${odd.length ? `, ${odd.length} live/other` : ''}`);
+  odd.forEach((r) => note(`? ${r.date} ${r.home} ${r.homeGoals ?? '-'}-${r.awayGoals ?? '-'} ${r.away} [status text: "${r.rawStatus}"]`));
   rows.slice(-8).forEach((r) => note(`- ${r.date} ${r.comp || '?'}: ${r.home} ${r.homeGoals ?? '-'}-${r.awayGoals ?? '-'} ${r.away} [${r.rawStatus}]`));
 
   const outFile = args.out || 'importer/out/matches.json';
