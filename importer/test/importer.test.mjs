@@ -159,3 +159,19 @@ ${block('')}${block(stoppageRed)}${block(stoppageRed)}
   assert.deepEqual([reds[0].minute, reds[0].side, reds[0].player], [93, 'home', 'S. Findlay']);
   assert.equal(d.notes.length, 0);
 });
+
+test('match page: a player with two goals in one entry, and a second-yellow dismissal', () => {
+  const html = `<html><body><main><h3>Key Events</h3>
+<div><div><h4>Rangers</h4></div><ul><li><span>L. Shankland</span> <span><span>(8&#x27; , 79&#x27;)</span></span><span>Goal 8 minutes, Goal 79 minutes</span></li></ul></div>
+<div><div><h4>Hearts</h4></div><ul><li><span>C. Miller</span> <span><span>(82&#x27; pen , 90&#x27;+4)</span></span><span>Penalty 82 minutes, Goal 90 minutes plus 4</span></li><li><span>J. Iredale</span> <span><span>( 62&#x27;)</span></span><span>Two Yellow Cards 62 minutes</span></li></ul></div>
+<div><div><div>Assists</div><div><span>Rangers,</span>D. Gassama (8&#x27;), R. McCrorie (79&#x27;)</div><div><span>Hearts,</span>J. McPake (94&#x27;)</div></div></div><hr>
+<div><span>home team,</span><span>Rangers</span><h4>Starting lineup</h4><ul>${pl(9, 'Shankland', 'Striker', 'L. Shankland')}</ul></div>
+<div><span>away team,</span><span>Hearts</span><h4>Starting lineup</h4><ul>${pl(7, 'Miller', 'Midfielder', 'C. Miller')}${pl(4, 'Iredale', 'Defender', 'J. Iredale')}</ul></div>
+</main></body></html>`;
+  const d = parseMatchPage(html);
+  assert.deepEqual(d.events.filter((e) => e.type === 'goal').map((e) => [e.minute, e.side, e.player, e.assist, e.detail]), [
+    [8, 'home', 'L. Shankland', 'D. Gassama', null], [79, 'home', 'L. Shankland', 'R. McCrorie', null], [82, 'away', 'C. Miller', null, 'penalty'], [94, 'away', 'C. Miller', 'J. McPake', null]]);
+  const red = d.events.find((e) => e.type === 'red');
+  assert.deepEqual([red.minute, red.side, red.player, red.detail], [62, 'away', 'J. Iredale', 'second yellow']);
+  assert.equal(d.notes.length, 0);
+});

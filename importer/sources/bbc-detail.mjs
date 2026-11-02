@@ -36,18 +36,29 @@ function keyEvents(html, notes) {
     const club = text(b[1]);
     for (const li of b[2].split(/<li[^>]*>/).slice(1)) {
       const t = text(li);
-      // "K. Nisbet (90'+5 pen) Penalty 90 minutes plus 5", "E. Fernandez (13' og) Own Goal 13 minutes", "C. Miller (57') Goal 57 minutes"
-      const m = t.match(new RegExp(`^(.*?)\\s*\\(\\s*${MIN}\\s*(og|pen)?\\s*\\)\\s*(.*)$`, 'i'));
+      // One entry per player, possibly several events:
+      //   "K. Nisbet (90'+5 pen) Penalty 90 minutes plus 5"
+      //   "E. Fernandez (13' og) Own Goal 13 minutes"
+      //   "L. Shankland (8' , 79') Goal 8 minutes, Goal 79 minutes"
+      //   "C. Miller (82' pen , 90'+4) Penalty 82 minutes, Goal 90 minutes plus 4"
+      //   "J. Iredale ( 62') Two Yellow Cards 62 minutes"
+      const m = t.match(/^(.*?)\s*\(\s*(\d[^)]*)\)\s*(.*)$/);
       if (!m) { notes.push(`unrecognised key event: "${t}"`); continue; }
-      const minute = minOf(m, 2, 3);
-      const flag = (m[4] || '').toLowerCase();
-      const label = m[5];
       const player = m[1].trim();
-      if (/^red card|^straight red|^second yellow/i.test(label)) out.push({ club, type: 'red', minute, player, detail: null, label });
-      else if (flag === 'og' || /^own goal/i.test(label)) out.push({ club, type: 'own_goal', minute, player, detail: null, label });
-      else if (flag === 'pen' || /^penalty/i.test(label)) out.push({ club, type: 'goal', minute, player, detail: 'penalty', label });
-      else if (/^goal/i.test(label)) out.push({ club, type: 'goal', minute, player, detail: null, label });
-      else notes.push(`key event with label "${label}": ${t}`);
+      const times = m[2].split(/\s*,\s*/).map((x) => x.match(new RegExp(`^\\s*${MIN}\\s*(og|pen)?\\s*$`, 'i')));
+      const labels = m[3].split(/,\s*(?=[A-Z])/);
+      if (times.some((x) => !x) || times.length !== labels.length) { notes.push(`unrecognised key event: "${t}"`); continue; }
+      times.forEach((tm, k) => {
+        const minute = minOf(tm, 1, 2);
+        const flag = (tm[3] || '').toLowerCase();
+        const label = labels[k];
+        if (/^(red card|straight red)/i.test(label)) out.push({ club, type: 'red', minute, player, detail: null, label });
+        else if (/^(two yellow|second yellow)/i.test(label)) out.push({ club, type: 'red', minute, player, detail: 'second yellow', label });
+        else if (flag === 'og' || /^own goal/i.test(label)) out.push({ club, type: 'own_goal', minute, player, detail: null, label });
+        else if (flag === 'pen' || /^penalty/i.test(label)) out.push({ club, type: 'goal', minute, player, detail: 'penalty', label });
+        else if (/^goal/i.test(label)) out.push({ club, type: 'goal', minute, player, detail: null, label });
+        else notes.push(`key event with label "${label}": ${t}`);
+      });
     }
   }
   return out;
@@ -168,7 +179,7 @@ export function parseMatchPage(html) {
   }
   // Red cards also appear under Key Events; add any the line-ups did not carry.
   for (const r of goals.filter((x) => x.type === 'red')) {
-    if (!events.some((e) => e.type === 'red' && e.player === r.player)) events.push({ type: 'red', side: ownerOf(r.player) || sideOf(r.club), minute: r.minute, player: r.player, assist: null, detail: null });
+    if (!events.some((e) => e.type === 'red' && e.player === r.player)) events.push({ type: 'red', side: ownerOf(r.player) || sideOf(r.club), minute: r.minute, player: r.player, assist: null, detail: r.detail });
   }
   events.sort((a, b) => a.minute - b.minute);
   const att = after('Attendance:');
