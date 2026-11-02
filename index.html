@@ -1240,7 +1240,13 @@ function teamBody(m){
 }
 
 /* ---------- competition filter, season card, half splits, shot maps ---------- */
-const compsOf=()=>[...new Set(S.matches.filter(m=>m.status==='done'&&m.comp).map(m=>m.comp))];
+const compRank=c=>{const x=String(c).toLowerCase();
+  if(/champions league/.test(x))return 5;if(/europa/.test(x))return 6;if(/conference/.test(x))return 7;
+  if(/league cup|efl cup|carabao|challenge cup/.test(x))return 3;
+  if(/\bcup\b/.test(x)&&!/friendly/.test(x))return 2;
+  if(/premier|premiership|championship|league|division|\bliga\b|serie/.test(x))return 1;
+  return 9};
+const compsOf=()=>[...new Set(S.matches.filter(m=>m.status==='done'&&m.comp).map(m=>m.comp))].sort((a,b)=>compRank(a)-compRank(b)||a.localeCompare(b));
 const compOk=m=>!V.comp||m.comp===V.comp;
 function compBar(){
   const cs=compsOf();if(cs.length<2)return '';
