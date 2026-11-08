@@ -433,7 +433,8 @@ main.lvm{padding-top:4px}
 .sbar{display:flex;height:26px;border-radius:13px;overflow:hidden;background:var(--line);margin-bottom:4px}
 .sbar span{display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:13px}
 .sbar .w{background:#1e8f4e}.sbar .d{background:#8a8f94}.sbar .l{background:#c0392b}
-.slab{display:flex;justify-content:space-between;font-size:11px;color:var(--mute);margin-bottom:6px}
+.slab{display:flex;font-size:11px;color:var(--mute);margin-bottom:6px}
+.slab span{flex:none;text-align:center;white-space:nowrap;overflow:visible;display:flex;justify-content:center}
 .smap{position:relative;width:100%;aspect-ratio:68/52.5;background:#2e8b4a;border:3px solid #1f6b37;border-radius:14px;overflow:hidden}
 .smap .pl{position:absolute;inset:0;width:100%;height:100%}
 .smap .ln{position:absolute;inset:0;width:100%;height:100%}.smap .ln line{stroke:#fff;stroke-width:1.5;stroke-dasharray:4 3}
@@ -1320,8 +1321,11 @@ function seasonCard(ms){
   const pc=n=>(n/ms.length*100).toFixed(1);
   const half=(f,p)=>ms.reduce((n,m)=>n+m.events.filter(e=>f(e)&&e.period===p).length,0);
   const kv=(a,b)=>`<div class="kv"><span>${a}</span><b>${b}</b></div>`;
-  return `<div class="card season"><div class="sbar"><span class="w" style="width:${pc(w)}%">${w||''}</span><span class="d" style="width:${pc(d)}%">${d||''}</span><span class="l" style="width:${pc(l)}%">${l||''}</span></div>
-  <div class="slab"><span>Won</span><span>Drawn</span><span>Lost</span></div>
+  /* each label sits under its own segment and only appears when that result has at least one game */
+  const seg=(c,n,lbl)=>n?`<span class="${c}" style="width:${pc(n)}%">${n}</span>`:'';
+  const lab=(n,lbl)=>n?`<span style="width:${pc(n)}%">${lbl}</span>`:'';
+  return `<div class="card season"><div class="sbar">${seg('w',w)}${seg('d',d)}${seg('l',l)}</div>
+  <div class="slab">${lab(w,'Won')}${lab(d,'Drawn')}${lab(l,'Lost')}</div>
   ${kv('Goals for / against',gf+' / '+ga)}${kv('Goal difference',(gf-ga>0?'+':'')+(gf-ga))}${kv('Points per game',((3*w+d)/ms.length).toFixed(2))}${kv('Goals for, 1st / 2nd half',half(isGF,1)+' / '+half(isGF,2))}${kv('Goals against, 1st / 2nd half',half(isGA,1)+' / '+half(isGA,2))}</div>`;
 }
 function halfTable(m){
@@ -1584,7 +1588,11 @@ function historyView(){
   if(V.matchId){const m=VM();if(m)return summaryView(m)}
   const ms=S.matches.filter(m=>m.status==='done'&&compOk(m)).sort((a,b)=>(b.date+b.time).localeCompare(a.date+a.time));
   const w=ms.filter(m=>score(m).us>score(m).them).length,d=ms.filter(m=>score(m).us===score(m).them).length,l=ms.length-w-d;
-  return header('Results',ms.length?`P${ms.length} · W${w} D${d} L${l}`:'')+`<main>${proUpcoming()}${formStrip(ms)}${compBar()}${seasonCard(ms)}${ms.length?`<div class="cols">${ms.map(resultCard).join('')}</div>`:(S.team&&S.team.proTeam?'':'<div class="empty"><b>No finished matches yet</b>Record your first match and it will appear here.</div>')}${proMore()}</main>`;
+  /* one list: recorded matches and the club's published results together, newest first */
+  const t=S.team;
+  const proDone=(CLOUD&&t&&t.proTeam)?PRO.matches.filter(m=>m.status==='finished'&&!proRecorded(m)&&compOk(m)):[];
+  const rows=[...ms.map(m=>({k:(m.date||'')+(m.time||''),h:resultCard(m)})),...proDone.map(m=>({k:(m.match_date||'')+String(m.kickoff||'').slice(0,5),h:proResultCard(m)}))].sort((a,b)=>b.k.localeCompare(a.k));
+  return header('Results',ms.length?`P${ms.length} · W${w} D${d} L${l}`:'')+`<main>${proUpcoming()}${formStrip(ms)}${compBar()}${seasonCard(ms)}${rows.length?`<div class="cols">${rows.map(r=>r.h).join('')}</div>`:(t&&t.proTeam?'':'<div class="empty"><b>No finished matches yet</b>Record your first match and it will appear here.</div>')}</main>`;
 }
 
 function summaryView(m){
@@ -3027,10 +3035,14 @@ function proUpcoming(){
   const body=next.length?next.slice(0,6).map(proRow).join(''):(PRO.busy?'<div class="note">Loading fixtures…</div>':`<div class="note">${esc(PRO.matches.length||PRO.at?'No upcoming fixtures found.':'No fixtures yet for '+(t.proClub||'this club')+'. They appear once the importer has run for it.')}</div>`);
   return `${proStatusLine()}<h2 style="margin-top:0">Coming up · ${esc(t.proClub||'')}</h2>${body}`;
 }
-function proMore(){
-  const t=S.team;if(!CLOUD||!t||!t.proTeam)return '';
-  const done=PRO.matches.filter(m=>m.status==='finished'&&!proRecorded(m)&&(!V.comp||compNorm(m.comp)===V.comp)).sort((a,b)=>b.match_date.localeCompare(a.match_date));
-  return done.length?`<h2>${S.matches.some(m=>m.status==='done')?'More results':'Results'} · ${esc(t.proClub||'')}</h2><p class="note" style="margin-top:0">From the club's published results. Tap one for goals, cards and line-ups.</p>${done.map(proRow).join('')}`:'';
+/* a finished feed game, drawn like one of your own recorded results (W/D/L badge, our score first); tap for goals, cards and line-ups */
+function proResultCard(m){
+  if(m.home_goals==null||m.away_goals==null)return proRow(m);
+  const home=proClubSide(m)==='home';
+  const us=home?m.home_goals:m.away_goals,them=home?m.away_goals:m.home_goals,opp=home?m.away:m.home;
+  const res=us>them?'W':us<them?'L':'D';
+  const col=res==='W'?'var(--ok)':res==='L'?'var(--bad)':'var(--warn)';
+  return `<div class="prow" data-act="proOpen" data-id="${esc(proKey(m))}" style="cursor:pointer"><div class="num" style="background:${col};color:#fff">${res}</div><div class="nm">${esc(S.team.name)} ${us}–${them} ${esc(opp)}<small>${esc(proComp(m))} · ${esc(proDate(m.match_date))}</small></div><span style="color:var(--mute)">›</span></div>`;
 }
 function proDetailView(m){
   const d=PRO.detail[proKey(m)];const fin=m.status==='finished';
