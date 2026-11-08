@@ -56,6 +56,9 @@ button[disabled]{opacity:.45}
 .prow .num{width:44px;height:44px;border-radius:12px;background:var(--p);color:var(--pt);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:19px;flex:none}
 .prow .nm{flex:1;min-width:0;font-weight:600}
 .prow .nm small{display:block;color:var(--mute);font-weight:400;font-size:13px}
+.prow .num.dt{width:54px;height:auto;min-height:60px;padding:5px 0;flex-direction:column;gap:1px;line-height:1.1;font-size:inherit}
+.prow .num.dt b{font-size:19px;font-weight:800}
+.prow .num.dt span{font-size:11px;font-weight:700;letter-spacing:.04em}
 .prow.out .num{background:#9aa6a0}
 .prow.sub .num{background:var(--s);color:var(--st);border:2px solid var(--p)}
 .seg3{display:flex;gap:4px;flex:none}
@@ -3019,10 +3022,20 @@ function proRound(m){
   return ex;
 }
 const proComp=m=>{const b=String(m.comp||'').split(' - ')[0].trim(),r=proRound(m);return [b,r].filter(Boolean).join(' · ')};
+/* neutral venue: cup semi-finals and finals are played away from either club's ground; the feed has no venue flag, so this goes by the round */
+const proNeutral=m=>{const r=proRound(m)+' '+String(m.comp||'');return /semi|final/i.test(r)&&!/quarter/i.test(r)};
+/* upcoming-game tile: DD / MMM / hh:mm, in our home colours for home games, inverted (away) colours for away games, grey for neutral */
+function proDateTile(m){
+  const d=String(m.match_date||'');const day=d.length>=10?String(parseInt(d.slice(8,10),10)):'';
+  const mon=['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'][parseInt(d.slice(5,7),10)-1]||'';
+  const tm=m.kickoff?String(m.kickoff).slice(0,5):'TBC';
+  const st=proNeutral(m)?'background:#9aa6a0;color:#fff;border:2px solid #9aa6a0':proClubSide(m)==='home'?'background:var(--p);color:var(--pt);border:2px solid var(--s)':'background:var(--s);color:var(--st);border:2px solid var(--p)';
+  return `<div class="num dt" style="${st}"><b>${esc(day)}</b><span>${mon}</span><span>${esc(tm)}</span></div>`;
+}
 function proRow(m){
-  const fin=m.status==='finished',sc=fin?`${m.home_goals}–${m.away_goals}`:(m.kickoff?String(m.kickoff).slice(0,5):'v');
+  const fin=m.status==='finished';
   const tm=(m.teams||[]).map(t=>PROTEAMS[t]||t).join(' & ');
-  return `<div class="prow" data-act="proOpen" data-id="${esc(proKey(m))}" style="cursor:pointer"><div class="num" style="font-size:${fin?17:14}px;width:54px">${esc(sc)}</div><div class="nm">${esc(m.home)} v ${esc(m.away)}<small>${esc(proComp(m))} · ${esc(proDate(m.match_date))}${m.status==='live'?' · live':m.status==='other'?' · '+esc(m.raw_status||''):''}</small></div><span style="color:var(--mute)">›</span></div>`;
+  return `<div class="prow" data-act="proOpen" data-id="${esc(proKey(m))}" style="cursor:pointer">${fin?`<div class="num" style="font-size:17px;width:54px">${esc(m.home_goals+'–'+m.away_goals)}</div>`:proDateTile(m)}<div class="nm">${esc(m.home)} v ${esc(m.away)}<small>${esc(proComp(m))} · ${esc(proDate(m.match_date))}${m.status==='live'?' · live':m.status==='other'?' · '+esc(m.raw_status||''):''}</small></div><span style="color:var(--mute)">›</span></div>`;
 }
 const proSideKey=n=>clubKey(n);
 function proRecorded(pm){return S.matches.some(x=>x.date===pm.match_date&&[pm.home,pm.away].some(n=>{const a=proSideKey(n),b=proSideKey(x.opp);return a&&b&&(a.includes(b)||b.includes(a))}))}
