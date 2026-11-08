@@ -776,10 +776,13 @@ function matchRound(m){
   return pm?proRound(pm):'';
 }
 const compLbl=m=>{const r=matchRound(m);return (m.comp||'')+(r?` (${r})`:'')};
+/* home side first with its score first; away games read "Opposition 2–2 Us" (neutral keeps us first) */
+function homeAway(m,sc){return m.venue==='away'?{l:m.opp,ls:sc.them,r:S.team.name,rs:sc.us}:{l:S.team.name,ls:sc.us,r:m.opp,rs:sc.them}}
 function resultCard(m){
   const sc=score(m);const res=sc.us>sc.them?'W':sc.us<sc.them?'L':'D';
   const col=res==='W'?'var(--ok)':res==='L'?'var(--bad)':'var(--warn)';
-  return `<div class="prow" data-act="histOpen" data-id="${m.id}" style="cursor:pointer"><div class="num" style="background:${col};color:#fff">${res}</div><div class="nm">${esc(S.team.name)} ${sc.us}–${sc.them} ${esc(m.opp)}<small>${esc(compLbl(m))} · ${m.venue==='home'?'Home':m.venue==='away'?'Away':'Neutral'} · ${esc(dateStr(m))}</small></div><span style="color:var(--mute)">›</span></div>`;
+  const h=homeAway(m,sc);
+  return `<div class="prow" data-act="histOpen" data-id="${m.id}" style="cursor:pointer"><div class="num" style="background:${col};color:#fff">${res}</div><div class="nm">${esc(h.l)} ${h.ls}–${h.rs} ${esc(h.r)}<small>${esc(compLbl(m))} · ${m.venue==='home'?'Home':m.venue==='away'?'Away':'Neutral'} · ${esc(dateStr(m))}</small></div><span style="color:var(--mute)">›</span></div>`;
 }
 function dateStr(m){try{return new Date(m.date+'T'+(m.time||'12:00')).toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short',year:'numeric'})}catch(e){return m.date}}
 
@@ -1614,7 +1617,7 @@ function summaryView(m){
   const row=(e,txt)=>`<div class="irow"><b>${fmtMin(e,m)}</b><span>${txt}</span></div>`;
   return `<header class="top"><div class="hrow"><button data-act="histBack" style="background:rgba(255,255,255,.2);color:var(--pt);min-width:44px;padding:0">‹</button><div style="flex:1;min-width:0">${S.team?`<div class="tn">${esc(S.team.name)}</div>`:''}<h1>Match summary</h1><div class="sub">${esc(dateStr(m))}</div></div></div></header>
   <main>
-  <div class="hero"><span class="res">${res}</span><div class="big">${sc.us} – ${sc.them}</div><div style="font-weight:700">${esc(S.team.name)} v ${esc(m.opp)}</div><div class="meta">${esc(compLbl(m))} · ${m.venue==='home'?'Home':m.venue==='away'?'Away':'Neutral'}${m.location?' · '+esc(m.location):''}${+m.attendance>0?' · '+(+m.attendance).toLocaleString('en-GB')+' attended':''}${m.referee?' · Ref: '+esc(m.referee):''}</div></div>
+  <div class="hero"><span class="res">${res}</span><div class="big">${homeAway(m,sc).ls} – ${homeAway(m,sc).rs}</div><div style="font-weight:700">${esc(homeAway(m,sc).l)} v ${esc(homeAway(m,sc).r)}</div><div class="meta">${esc(compLbl(m))} · ${m.venue==='home'?'Home':m.venue==='away'?'Away':'Neutral'}${m.location?' · '+esc(m.location):''}${+m.attendance>0?' · '+(+m.attendance).toLocaleString('en-GB')+' attended':''}${m.referee?' · Ref: '+esc(m.referee):''}</div></div>
   ${m.status==='live'?`<button class="btn block" data-act="continueMatch" style="margin:10px 0">Continue recording</button>`:''}
   <div class="card" style="margin-top:12px"><div class="lbl" style="margin-top:0">Summary</div><p style="margin:4px 0 0;line-height:1.5">${esc(matchSummary(m))}</p></div>
   ${shotMapHtml(ev)?`<h2>Shot map</h2>${shotMapHtml(ev)}`:''}
@@ -3058,7 +3061,7 @@ function proResultCard(m){
   const us=home?m.home_goals:m.away_goals,them=home?m.away_goals:m.home_goals,opp=home?m.away:m.home;
   const res=us>them?'W':us<them?'L':'D';
   const col=res==='W'?'var(--ok)':res==='L'?'var(--bad)':'var(--warn)';
-  return `<div class="prow" data-act="proOpen" data-id="${esc(proKey(m))}" style="cursor:pointer"><div class="num" style="background:${col};color:#fff">${res}</div><div class="nm">${esc(S.team.name)} ${us}–${them} ${esc(opp)}<small>${esc(proComp(m))} · ${esc(proDate(m.match_date))}</small></div><span style="color:var(--mute)">›</span></div>`;
+  return `<div class="prow" data-act="proOpen" data-id="${esc(proKey(m))}" style="cursor:pointer"><div class="num" style="background:${col};color:#fff">${res}</div><div class="nm">${esc(m.home)} ${m.home_goals}–${m.away_goals} ${esc(m.away)}<small>${esc(proComp(m))} · ${esc(proDate(m.match_date))}</small></div><span style="color:var(--mute)">›</span></div>`;
 }
 function proDetailView(m){
   const d=PRO.detail[proKey(m)];const fin=m.status==='finished';
