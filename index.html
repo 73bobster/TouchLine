@@ -1320,21 +1320,20 @@ function fitForm(){
 }
 window.addEventListener('resize',fitForm);
 function seasonCard(ms){
-  /* totals cover recorded matches AND the club's published (BBC) results; half-by-half needs minute-by-minute events, so it stays recorded-only */
+  /* totals cover recorded matches AND the club's published (BBC) results */
   const sc=formItems(ms);
   if(!sc.length)return '';
   const N=sc.length;
   const w=sc.filter(x=>x.us>x.them).length,d=sc.filter(x=>x.us===x.them).length,l=N-w-d;
   const gf=sc.reduce((n,x)=>n+x.us,0),ga=sc.reduce((n,x)=>n+x.them,0);
   const pc=n=>(n/N*100).toFixed(1);
-  const half=(f,p)=>ms.reduce((n,m)=>n+m.events.filter(e=>f(e)&&e.period===p).length,0);
   const kv=(a,b)=>`<div class="kv"><span>${a}</span><b>${b}</b></div>`;
   /* each label sits under its own segment and only appears when that result has at least one game */
   const seg=(c,n,lbl)=>n?`<span class="${c}" style="width:${pc(n)}%">${n}</span>`:'';
   const lab=(n,lbl)=>n?`<span style="width:${pc(n)}%">${lbl}</span>`:'';
   return `<div class="card season"><div class="sbar">${seg('w',w)}${seg('d',d)}${seg('l',l)}</div>
   <div class="slab">${lab(w,'Won')}${lab(d,'Drawn')}${lab(l,'Lost')}</div>
-  ${kv('Goals for / against',gf+' / '+ga)}${kv('Goal difference',(gf-ga>0?'+':'')+(gf-ga))}${kv('Points per game',((3*w+d)/N).toFixed(2))}${ms.length?kv('Goals for, 1st / 2nd half',half(isGF,1)+' / '+half(isGF,2))+kv('Goals against, 1st / 2nd half',half(isGA,1)+' / '+half(isGA,2)):''}${ms.length&&ms.length<N?`<div class="note" style="margin:6px 0 0">Half-by-half figures cover the ${ms.length} match${ms.length===1?'':'es'} you recorded.</div>`:''}</div>`;
+  ${kv('Goals for / against',gf+' / '+ga)}${kv('Goal difference',(gf-ga>0?'+':'')+(gf-ga))}${kv('Points per game',((3*w+d)/N).toFixed(2))}</div>`;
 }
 function halfTable(m){
   const np=Math.max(1,m.periods||1),ev=m.events;
