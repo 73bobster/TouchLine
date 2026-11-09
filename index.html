@@ -165,6 +165,11 @@ a{color:var(--p);font-weight:600}
 .tag{display:inline-block;font-size:12px;font-weight:700;padding:3px 9px;border-radius:12px;background:#e4e9e6;margin-right:4px}
 .tag.ok{background:#d9f2e3;color:#14663a}.tag.warn{background:#fdf0d2;color:#8a5a00}.tag.bad{background:#fbdcd8;color:#8e2418}
 .banner{border-radius:12px;padding:10px 12px;margin-bottom:12px;font-size:14px;font-weight:600;background:#fdf0d2;color:#6b4700}
+#instbar{position:fixed;left:12px;right:12px;bottom:calc(74px + env(safe-area-inset-bottom));max-width:536px;margin:0 auto;z-index:8;background:var(--p);color:var(--pt);border-radius:16px;padding:12px 12px 12px 16px;display:flex;align-items:center;gap:10px;box-shadow:0 6px 20px rgba(0,0,0,.28);font-weight:600;font-size:15px}
+#instbar .tx{flex:1;min-width:0}
+#instbar .tx small{display:block;font-weight:400;opacity:.9;font-size:13px}
+#instbar button{min-height:44px;font-weight:700;background:#fff;color:#14201a;padding:0 16px}
+#instbar button.x{background:rgba(255,255,255,.2);color:inherit;min-width:44px;padding:0}
 .kv{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--line)}.kv:last-child{border:0}
 fieldset{border:0;padding:0;margin:0;min-width:0}
 fieldset[disabled] input,fieldset[disabled] select,fieldset[disabled] textarea,fieldset[disabled] button.sw{opacity:.7}
@@ -481,6 +486,36 @@ const $=s=>document.querySelector(s);
 const uid=()=>Math.random().toString(36).slice(2,9)+Date.now().toString(36).slice(-4);
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const pad=n=>String(n).padStart(2,'0');
+
+/* ---------- install as an app (PWA) ---------- */
+let INSTALL_EV=null,INSTBAR_OFF=false;
+const IS_STANDALONE=()=>{try{return matchMedia('(display-mode: standalone)').matches||navigator.standalone===true}catch(e){return false}};
+const IS_IOS=/iphone|ipad|ipod/i.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+const WANT_INSTALL=(()=>{try{return new URLSearchParams(location.search).has('install')}catch(e){return false}})();
+function installCard(){
+  if(IS_STANDALONE())return `<div class="card note" style="margin:0 0 12px">✓ Touchline is installed. It opens full-screen and works without signal.</div>`;
+  if(INSTALL_EV)return `<div class="card" style="margin:0 0 12px"><button class="btn block" data-act="install">Install Touchline</button><div class="note" style="margin:8px 0 0">One tap. Opens full-screen and works without signal.</div></div>`;
+  if(IS_IOS)return `<div class="card note" style="margin:0 0 12px">iPhone: open in <b>Safari</b>, tap the Share button, then <b>Add to Home Screen</b>.<br>Once installed it opens full-screen and works without signal.</div>`;
+  return `<div class="card note" style="margin:0 0 12px">iPhone: open in Safari → Share → <b>Add to Home Screen</b>.<br>Android: Chrome menu → <b>Install app</b> / Add to Home screen.<br>Once installed it opens full-screen and works without signal.</div>`;
+}
+function installUI(){
+  const slot=document.getElementById('instslot');if(slot)slot.innerHTML=installCard();
+  let bar=document.getElementById('instbar');
+  const show=WANT_INSTALL&&!INSTBAR_OFF&&!IS_STANDALONE()&&(INSTALL_EV||IS_IOS);
+  if(!show){if(bar)bar.remove();return}
+  if(!bar){bar=document.createElement('div');bar.id='instbar';document.body.appendChild(bar)}
+  bar.innerHTML=INSTALL_EV
+    ?`<div class="tx">Install Touchline<small>Opens full-screen, works without signal</small></div><button data-act="install">Install</button><button class="x" data-act="instClose" aria-label="Dismiss">✕</button>`
+    :`<div class="tx">Install Touchline<small>Tap the Share button in Safari, then Add to Home Screen</small></div><button class="x" data-act="instClose" aria-label="Dismiss">✕</button>`;
+}
+async function doInstall(){
+  const ev=INSTALL_EV;if(!ev)return;
+  INSTALL_EV=null;
+  try{ev.prompt();await ev.userChoice}catch(e){}
+  installUI();
+}
+window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();INSTALL_EV=e;installUI()});
+window.addEventListener('appinstalled',()=>{INSTALL_EV=null;installUI()});
 const todayStr=()=>{const d=new Date();return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())};
 const nowHM=()=>{const d=new Date();return pad(d.getHours())+':'+pad(d.getMinutes())};
 const first=n=>String(n||'').trim().split(/\s+/)[0]||'';
@@ -730,7 +765,7 @@ function teamView(){
   return header('Team',t.name)+`<main>${teamFields(t)}
   <p class="note">Changes apply to new matches. Colours update the whole app straight away.</p>
   <h2>Install on your phone</h2>
-  <div class="card note" style="margin:0 0 12px">iPhone: open in Safari → Share → <b>Add to Home Screen</b>.<br>Android: Chrome menu → <b>Install app</b> / Add to Home screen.<br>Once installed it opens full-screen and works without signal.</div>
+  <div id="instslot">${installCard()}</div>
   <h2>Your data</h2>
   <div class="row"><button class="btn sec" data-act="backup">Copy backup</button><button class="btn sec" data-act="restoreOpen">Restore</button></div>
   <button class="btn sec block" data-act="reset" style="color:var(--bad);margin-top:10px">Reset everything</button>
@@ -1889,6 +1924,8 @@ function act(a,ds,el){
     case 'preset':{const p=PRESETS[+ds.i];const t=T();t.primary=p[1];t.secondary=p[2];save();break}
     case 'proFollow':{const t=T();t.proSeen=true;t.proOn=!t.proOn;if(!t.proOn){t.proTeam='';t.proClub='';t.proName=''}else if(!t.proName){const f=clubFind(t.name);if(f){t.proName=f.name;t.proTeam=f.slug;t.proClub=f.name}}save();PRO.at=0;render();break}
     case 'fmt':{const f=FORMATS[+ds.i];const t=T();t.onPitch=f[1];t.periods=f[2];t.periodMins=f[3];save();break}
+    case 'install':doInstall();return;
+    case 'instClose':INSTBAR_OFF=true;installUI();return;
     case 'backup':V.sheet={kind:'share',title:'Backup',note:'Copy this and keep it somewhere safe, such as a note or an email to yourself. Use Restore to bring it back.',d:{text:JSON.stringify(S)}};renderSheet();return;
     case 'restoreOpen':V.sheet={kind:'restore',d:{text:''}};renderSheet();return;
     case 'restoreDo':{
@@ -2454,7 +2491,7 @@ function teamView(){
   ${CLOUD&&(ed||su)?`<h2>People</h2><div class="row"><button class="btn sec" data-act="inviteOpen">Invite someone</button><button class="btn sec" data-act="membersOpen">Who has access</button></div>`:''}
   ${CLOUD&&ed?`<h2>Remove this team</h2><div class="note" style="margin-top:0">Takes ${esc(t.name)} off every device and for everyone who has access.</div><button class="btn sec block" data-act="delTeamOpen" style="color:var(--bad);border-color:var(--bad)">Remove team…</button>`:''}
   <h2>Install on your phone</h2>
-  <div class="card note" style="margin:0 0 12px">iPhone: open in Safari → Share → <b>Add to Home Screen</b>.<br>Android: Chrome menu → <b>Install app</b> / Add to home screen.<br>Once installed it opens full-screen and works without signal.</div>
+  <div id="instslot">${installCard()}</div>
   ${ed&&!CLOUD?`<h2>Your data</h2><div class="row"><button class="btn sec" data-act="backup">Copy backup</button><button class="btn sec" data-act="restoreOpen">Restore</button></div><button class="btn sec block" data-act="reset" style="color:var(--bad);margin-top:10px">Reset everything</button>`:''}
   </main>`;
 }
@@ -3236,6 +3273,7 @@ document.addEventListener('visibilitychange',()=>{if(!document.hidden){const m=M
 
 (()=>{const q=new URLSearchParams(location.search).get('invite');if(q){V.auth.invite=q.toUpperCase();V.auth.mode='up';if(CLOUD&&DB.user)V.newTeam=true}})();
 render();
+installUI();
 finishLink();
 if(CLOUD&&DB.user)setTimeout(()=>syncNow(),300);
 if('serviceWorker' in navigator&&/^https?:$/.test(location.protocol)){navigator.serviceWorker.register('sw.js').catch(()=>{})}
